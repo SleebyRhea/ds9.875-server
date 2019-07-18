@@ -1,25 +1,30 @@
 [Unit]
-Description=Avorion Server %i
+Description=Avorion Server: %i
 After=steamcmd.target
 
 [Service]
-WorkingDirectory=/srv/avorion/%i
-PrivateUsers=true
+Type=forking
 User=avorion
 Group=dsnineadm
+WorkingDirectory=/srv/avorion
 ProtectSystem=full
+PrivateUsers=true
 ProtectHome=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
-ExecStart=/bin/sh -c '/usr/bin/screen -DmS avorion-%i /srv/avorion/server_installation/server.sh "%i" --datapath /srv/avorion/'
 
-ExecStop=/usr/bin/screen -p 0 -S avorion-%i -X eval 'stuff "/say SERVER SHUTTING DOWN."\\015'
-ExecStop=/usr/bin/screen -p 0 -S avorion-%i -X eval 'stuff "/save"\\015'
-ExecStop=/usr/bin/screen -p 0 -S avorion-%i -X eval 'stuff "/stop"\\015'
+; This should be set to the Steam64 ID for the
+; primary server administrator
+Environment=ADMIN=
 
-Restart=on-failure
-RestartSec=60s
+ExecStart=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock new-session -d -s avorion-%i "cd /srv/avorion/server_installation; LD_LIBRARY_PATH=/srv/avorion/server_installation/linux64 /srv/avorion/server_installation/bin/AvorionServer --galaxy-name %i --admin ${ADMIN} --datapath /srv/avorion; exit $$?"
+ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock send-keys -t avorion-%i '/say Server going is down' ENTER
+ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock send-keys -t avorion-%i '/save' ENTER
+ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock send-keys -t avorion-%i '/stop' ENTER
+
+Restart=always
+RestartSec=10s
 
 [Install]
 WantedBy=multi-user.target
