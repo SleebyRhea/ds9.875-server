@@ -17,7 +17,7 @@ if onServer() then
 
 			-- Since only entities that we want to work with have the offlineguard_entity.lua script
 			-- attached, we simply grab all of those entities. Then, using the player refs we tabled
-			-- earlier, we check the value of Entity()->OfflineGuardEntity.getOwner(). If a match is
+			-- after, we check the value of Entity()->OfflineGuardEntity.getOwner(). If a match is
 			-- found, we abort that loop and set the craft in question to be vulnerable. Otherwise,
 			-- the craft is set to invincible.
 			local i, pass = 0, false
@@ -29,6 +29,7 @@ if onServer() then
 					end
 				end
 
+				-- Here, pass means that the player is online.
 				if not pass then
 					entity.invincible = true
 					i = i + 1
@@ -43,6 +44,7 @@ if onServer() then
 		end
 	end
 
+	-- Only update every 30 seconds or so
 	function OfflineGuardSector.getUpdateInterval()
 		return 30
 	end
