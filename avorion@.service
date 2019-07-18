@@ -1,0 +1,25 @@
+[Unit]
+Description=Avorion Server %i
+After=steamcmd.target
+
+[Service]
+WorkingDirectory=/srv/avorion/%i
+PrivateUsers=true
+User=avorion
+Group=dsnineadm
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ExecStart=/bin/sh -c '/usr/bin/screen -DmS avorion-%i /srv/avorion/server_installation/server.sh "%i" --datapath /srv/avorion/'
+
+ExecStop=/usr/bin/screen -p 0 -S avorion-%i -X eval 'stuff "/say SERVER SHUTTING DOWN."\\015'
+ExecStop=/usr/bin/screen -p 0 -S avorion-%i -X eval 'stuff "/save"\\015'
+ExecStop=/usr/bin/screen -p 0 -S avorion-%i -X eval 'stuff "/stop"\\015'
+
+Restart=on-failure
+RestartSec=60s
+
+[Install]
+WantedBy=multi-user.target

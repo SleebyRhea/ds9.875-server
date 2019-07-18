@@ -1,0 +1,22 @@
+[Unit]
+Description=Steam Public Service
+After=network.target
+
+[Service]
+WorkingDirectory=/srv/avorion
+PrivateUsers=true
+User=avorion
+Group=dsnineadm
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RemainAfterExit=false
+ExecStart=/usr/bin/tmux -S "/var/steamcmd/tsockets/dsnineadm" new-session -d -s steamcli /usr/games/steamcmd +login anonymous
+
+Restart=on-failure
+RestartSec=60s
+
+[Install]
+WantedBy=multi-user.target
