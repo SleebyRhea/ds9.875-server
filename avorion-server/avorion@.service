@@ -18,7 +18,7 @@ ProtectControlGroups=true
 ; primary server administrator
 Environment=ADMIN=
 
-ExecStart=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock new-session -d -s avorion-%i "cd /srv/avorion/server_installation; LD_LIBRARY_PATH=/srv/avorion/server_installation/linux64 /srv/avorion/server_installation/bin/AvorionServer --galaxy-name %i --admin ${ADMIN} --datapath /srv/avorion; exit $$?"
+ExecStart=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock new-session -d -s avorion-%i "cd /srv/avorion/server_files; LD_LIBRARY_PATH=/srv/avorion/server_files/linux64 /srv/avorion/server_files/bin/AvorionServer --galaxy-name %i --admin ${ADMIN} --datapath /srv/avorion; exit $$?"
 ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock send-keys -t avorion-%i '/say Server going is down' ENTER
 ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock send-keys -t avorion-%i '/save' ENTER
 ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock send-keys -t avorion-%i '/stop' ENTER
