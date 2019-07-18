@@ -1,22 +1,25 @@
 [Unit]
-Description=Steam Public Service
+Description=SteamCMD Background Service
 After=network.target
 
 [Service]
-WorkingDirectory=/srv/avorion
-PrivateUsers=true
 User=avorion
 Group=dsnineadm
-ProtectSystem=full
-ProtectHome=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-RemainAfterExit=false
-ExecStart=/usr/bin/tmux -S "/var/steamcmd/tsockets/dsnineadm" new-session -d -s steamcli /usr/games/steamcmd +login anonymous
+Type=forking
+;WorkingDirectory=/srv/avorion
+;PrivateUsers=true
+;ProtectSystem=full
+;ProtectHome=true
+;ProtectKernelTunables=true
+;ProtectKernelModules=true
+;ProtectControlGroups=true
+
+ExecStart=/usr/bin/tmux -S /srv/avorion/dsnineadm.sock new-session -d -s steamcli '/usr/games/steamcmd +login anonymous'
+ExecStop=/usr/bin/tmux -S /srv/avorion/dsnineadm.sock send-keys -t steamcli 'quit' ENTER
 
 Restart=on-failure
-RestartSec=60s
+RestartSec=10s
 
 [Install]
 WantedBy=multi-user.target
+
