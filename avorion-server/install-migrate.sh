@@ -4,6 +4,7 @@
 # IDGAF license -- Do whatever you want with this
 
 AVORIONDIR=''
+AVORIONPRF='/etc/profile.d/zzz-avorionservercommands.sh'
 INSTALLDIR='/srv/avorion'
 USR=avorion
 GRP=dsnineadm
@@ -72,15 +73,15 @@ while [[ -z "$AVORIONDIR" ]]; do
 		echo "That directory does not exist"
 		continue
 	fi
-done
-
-# Check if the supplied $AVORIONDIR has a server.ini file present and prompt the
-# user for confirmation to proceed if it does NOT
-if [[ ! -f "$AVORIONDIR"/server.ini ]]; then
-	if ! yesno "The directory $AVORIONDIR does not contain a server.ini file. Is this correct?"; then
-		AVORIONDIR=''
+	
+	# Check if the supplied $AVORIONDIR has a server.ini file present and prompt the
+	# user for confirmation to proceed if it does NOT
+	if [[ ! -f "$AVORIONDIR"/server.ini ]]; then
+		if ! yesno "The directory $AVORIONDIR does not contain a server.ini file. Is this correct?"; then
+			AVORIONDIR=''
+		fi
 	fi
-fi
+done
 
 # Prep the server installation directory
 if [[ ! -d "$INSTALLDIR" ]]; then
@@ -93,6 +94,9 @@ if [[ ! -d /srv/avorion/sockets ]]; then
 	mkdir -p /srv/avorion/sockets \
 		|| exit 1
 fi
+
+# Prep the admin command bash profile
+touch "${AVORPROFILE}"
 
 ##############
 # Installation
@@ -113,19 +117,25 @@ seperate
 
 echo "Installing Avorion Server and setting ownership to $USR:$GRP"
 echo "(This may take some time)"
+
+# If the the admin group as defined in $GRP does not exist, create it
 if ! grep -q "$GRP" /etc/group >/dev/null; then
 	groupadd "$GRP" \
 		|| exit 1
 fi
 
+# Same with the user
 if ! grep -q "$USR" /etc/passwd; then
 	useradd avorion -d "$INSTALLDIR" --no-create-home -g "$GRP" -r \
 		|| exit 1
 fi
 
+# Install a fresh instance of Avorion in installation directory under the
+# subdirectory server_files
 sudo -u avorion "$STEAMCMD" +login anonymous +force_install_dir "$INSTALLDIR"/server_files +app_update 565060 validate +exit \
 	|| exit 1
 
+# Recursively set *all* permissions to $USR:$GRP in $INSTALLDIR
 chown -R "$USR":"$GRP" "$INSTALLDIR" \
 	|| exit 1
 
@@ -145,6 +155,99 @@ git clone "$SERVERGIT" /opt/avorion-server-repo >/dev/null 2>&1 || {
 
 cp -ft "$UNITDIR" /opt/avorion-server-repo/avorion@.service /opt/avorion-server-repo/steamcmd.service \
 	|| exit 1
+
+cat >> /etc/profile.d/"${AVORPROFILE}" << _EOF_
+if [[ ! "\$(groups)" =~ (^$GRP | $GRP | $GRP\$) ]] && [[ ! "\$(id -u)" == 0 ]]; then
+	printf '%s\\n' '$(tput bold)$(tput setaf 7)DeepSpace 9.875 -- Service Instances:$(tput sgr0)'
+	function showinstances() {
+		find '${INSTALLDIR}/sockets' -name '*.sock' -printf '%f\\n' | sort | while read -r _sock; do
+			local _instance="\${_sock%%.sock*}"
+			local _cmd="$(which tmux) -S ${INSTALLDIR}/sockets/\${_sock} attach -t \${_a}"
+		
+			if systemctl list-units avorion@* 2>&1 | grep -q "^avorion@\${_instance}.service " >/dev/null 2>&1 ; then
+				systemctl status avorion@\${_instance} >/dev/null 2>&1 \
+					&& echo "\${_instance} (Avorion) -- $(tput setaf 2)Online$(tput sgr0)" \
+					|| echo "\${_instance} (Avorion) -- $(tput setaf 1)Offline$(tput sgr0)"
+
+			elif [[ "\$_instance" =~ ^steam(cmd|cli)$ ]]; then
+				systemctl status "\${_instance}" >/dev/null 2>&1 \
+					&& echo "\${_instance} -- $(tput setaf 2)Online$(tput sgr0)" \
+					|| echo "\${_instance} -- $(tput setaf 1)Offline$(tput sgr0)"
+
+			else
+				systemctl status "\${_instance}" >/dev/null 2>&1 \
+					&& echo "\${_instance} -- $(tput setaf 2)Online$(tput sgr0)" \
+					|| echo "\${_instance} -- $(tput setaf 1)Offline$(tput sgr0)"
+			fi
+		done
+	}
+
+	function avorion-cmd () {
+		command -v tmux >/dev/null 2>&1 \\ {
+			echo "avorion-cmd requires tmux to function! Please run apt install -y tmux"
+			return 1
+		}
+		
+		if ! { [[ -z "\$TMUX" ]] && [[ ! "\$TERM" =~ ^(screen|tmux) ]] && [[ -z "\$TMUX_PANE" ]]; }; then
+			echo "This command should not be run from within a Screen/Tmux session"
+		fi
+
+		#####
+
+		local _tmuxsess _tmuxcmd
+
+		if [[ ! "\$2" =~ (update|validate) ]]; then
+			_tmuxsess="\$2"
+			_tmuxsess="\${_tmuxsess//[ _]/\\-}"
+			_tmuxsess="\${_tmuxsess//[^a-zA-Z0-9\\-]/}"
+
+			systemctl status avorion@"\$_tmuxsess".service >/dev/null 2>&1 || {
+				echo "\$_tmuxsess is not a valid Avorion instance."
+				return 1
+			}
+		else
+			_tmuxsess=steamcli
+			systemctl status steamcmd.service >/dev/null 2>&1 || {
+				echo "Steam is currently down!"
+				return 1
+			}
+		fi
+
+		_tmuxcmd="\$(which tmux) -S ${INSTALLDIR}/sockets/\${_tmuxsess}.sock"
+		
+		case "\$1" in 
+			attach)
+				"\$_tmuxcmd" attach-session -t "\$_tmuxsess" -s "\$(whoami)"
+				;;
+			
+			view)
+				"\$_tmuxcmd" attach-session -t "\$_tmuxsess" -s "\$(whoami)" -r
+				;;
+			
+			exec)
+				shift; shift
+				"\$_tmuxcmd" send-keys "\$(printf '%q' "\$@")" ENTER \\; pipe-pane 'cat > /dev/stdout'
+				;;
+			
+			update)
+				systemctl stop avorion@*
+				echo "Updating Avorion"
+				"\$_tmuxcmd" send-keys "+force_install_dir ${INSTALLDIR}/server_files +app_update \$AVORIONSTEAMID validate" ENTER \\; pipe-pane 'cat > ${INSTALLDIR}/server_files/steamupdate.log'
+				( tail -f -n0 '${INSTALLDIR}/server_files/steamupdate.log' & ) | tee | grep -q Completed
+				systemctl start avorion@*
+				;;
+			
+			?)
+				printf '%s\\n' "Invalid argument passed: <\$(printf '%q' "\$1")>"
+				exit
+				;;
+		esac
+	}
+
+	showinstances
+fi
+_EOF_
+
 
 ##############
 # Service Init
