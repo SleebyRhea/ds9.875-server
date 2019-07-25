@@ -163,7 +163,8 @@ case "$1" in
 		echo "Options:"
 		printf '\t%s\n' \
 			"help: This help text" \
-			"update: Force a full Avorion server update. Note that this brings the server down following the update."
+			"update: Force a full Avorion server update. Note that this brings the server down following the update." \
+			"showinstances: Display a listing of all Avorion/Steam instances"
 		
 		printf '\t%s\n\t\t%s\n' \
 			"attach: Attach to a service instance." \
