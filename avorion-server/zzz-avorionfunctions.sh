@@ -131,14 +131,26 @@ if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_
 			help)
 				echo "Usage: avorioncmd <option> <parameters>"
 				echo "Options:"
-				printf '\t%s' \
-					"attach: Attach to a service instance.\n\t\tExample: ${_grn}avorioncmd attach ds9server${_clr}" \
-					"view: Attach to a service instance in read-only mode.\n\t\tExample: ${_grn}avorioncmd view ds9server${_clr}" \
-					"exec: Run the specified commands in the service supplied\n\t\tExample: ${_grn}avorioncmd exec ds9server <COMMANDS>\n\t\t${_red}WARNING:${_clr} May be buggy, please dont use this for large Lua scripts commands until further tested." \
-					"backup: Force a backup run of the given instance\n\t\tExample: ${_grn}avorioncmd backup ds9server${_clr}\n\t\t${_yel}NOTICE: Unimplemented at this time.${_clr}" \
-					"resetsector: Reset the given sector/sectors for a server instance\n\t\tExample: ${_grn}avorioncmd resetsector x y${_clr}\n\t\t${_yel}NOTICE: Unimplemented at this time.${_clr}" \
+				printf '\t%s\n' \
 					"update: Force a full Avorion server update. Note that this brings the server down for the duration." \
 					"help: This help text"
+				
+				printf '\t%s\n\t\t%s\n' \
+					"attach: Attach to a service instance." \
+						"Example: ${_grn}avorion-cmd attach ds9server${_clr}" \
+					"view: Attach to a service instance in read-only mode." \
+						"Example: ${_grn}avorion-cmd view ds9server${_clr}"
+				
+				printf '\t%s\n\t\t%s\n\t\t%s\n' \
+					"exec: Run the specified commands in the service supplied" \
+						"Example: ${_grn}avorion-cmd exec ds9server <COMMANDS>" \
+						"${_red}WARNING:${_clr} Untested, and may be buggy, please dont use this for large Lua scripts commands until further tested." \
+					"backup: Force a backup run of the given instance" \
+						"Example: ${_grn}avorion-cmd backup ds9server${_clr}" \
+						"${_yel}NOTICE:${_clr} Unimplemented at this time." \
+					"resetsector: Reset the given sector/sectors for a server instance" \
+						"Example: ${_grn}avorion-cmd resetsector x y${_clr}" \
+						"${_yel}NOTICE:${_clr} Unimplemented at this time."
 					
 					return 0
 				;;
