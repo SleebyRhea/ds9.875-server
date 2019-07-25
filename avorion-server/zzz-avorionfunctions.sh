@@ -53,25 +53,26 @@ if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_
 		_wht="$(tput setaf 7)"; _grn="$(tput setaf 2)"
 		_red="$(tput setaf 1)"; _yel="$(tput setaf 3)"
 
-		if [[ ! "$2" =~ (update|validate) ]]; then
-			_tmuxsess="$2"
-			_tmuxsess="${_tmuxsess//[ _]/\-}"
-			_tmuxsess="${_tmuxsess//[^a-zA-Z0-9\-]/}"
+		if [[ ! "$2" =~ (help|update|validate) ]]; then
+				_tmuxsess="$2"
+				_tmuxsess="${_tmuxsess//[ _]/\-}"
+				_tmuxsess="${_tmuxsess//[^a-zA-Z0-9\-]/}"
 
-			systemctl status avorion@"$_tmuxsess".service >/dev/null 2>&1 || {
-				echo "$_tmuxsess is not a valid Avorion instance."
-				return 1
-			}
-		else
-			_tmuxsess=steamcli
-			systemctl status steamcmd.service >/dev/null 2>&1 || {
-				echo "Steam is currently down!"
-				return 1
-			}
+				systemctl status avorion@"$_tmuxsess".service >/dev/null 2>&1 || {
+					echo "$_tmuxsess is not a valid Avorion instance."
+					return 1
+				}
+			#else
+			#	_tmuxsess=steamcli
+			#	systemctl status steamcmd.service >/dev/null 2>&1 || {
+			#		echo "Steam is currently down!"
+			#		return 1
+			#	}
+			#fi
+
+			_tmuxcmd="$(which tmux) -S ${AVORION_SERVICEDIR}/sockets/${_tmuxsess}.sock"
 		fi
 
-		_tmuxcmd="$(which tmux) -S ${AVORION_SERVICEDIR}/sockets/${_tmuxsess}.sock"
-		
 		case "$1" in 
 			attach)
 				"$_tmuxcmd" attach-session -t "$_tmuxsess"
