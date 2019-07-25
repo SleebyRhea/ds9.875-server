@@ -14,8 +14,8 @@ ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
 
-ExecStart=/usr/bin/tmux -S /srv/avorion/sockets/steamcmd.sock new-session -d -s steamcli "/usr/games/steamcmd +login anonymous"
-ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/steamcmd.sock send-keys -t steamcli 'quit' ENTER
+ExecStart=/usr/bin/tmux -S /srv/avorion/sockets/steamcmd.sock new-session -d -s steamcmd "/usr/games/steamcmd +login anonymous"
+ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/steamcmd.sock send-keys -t steamcmd 'quit' ENTER
 
 Restart=on-failure
 RestartSec=10s

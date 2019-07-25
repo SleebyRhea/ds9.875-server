@@ -10,41 +10,48 @@ if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_
 		
 		if ! { [[ -z "$TMUX" ]] && [[ ! "$TERM" =~ ^(screen|tmux) ]] && [[ -z "$TMUX_PANE" ]]; }; then
 			echo "This command should not be run from within a Screen/Tmux session"
+			return 1
 		fi
 
 		#####
 
-		local _tmuxsess _tmuxcmd
-		local _bld _clr _grn _red _wht
+		local _tmuxsess _tmuxsock _tmuxconf _tmuxcmd
+		local _bld _clr _grn _red _wht _yel
 		_clr="$(tput sgr0)"; _bld="$(tput bold)";
 		_wht="$(tput setaf 7)"; _grn="$(tput setaf 2)"
 		_red="$(tput setaf 1)"; _yel="$(tput setaf 3)"
 
+		_tmuxconf=/etc/avorioncmd-tmux.conf
+		_tmuxcmd="$(which tmux)"
+		
 		if [[ ! "$1" =~ (help|update|validate|showinstances) ]]; then
 			_tmuxsess="$2"
 			_tmuxsess="${_tmuxsess//[ _]/\-}"
 			_tmuxsess="${_tmuxsess//[^a-zA-Z0-9\-]/}"
 
-			systemctl status avorion@"$_tmuxsess".service >/dev/null 2>&1 || {
-				echo "$_tmuxsess is not a valid Avorion instance."
+			if [[ "$_tmuxsess" =~ ^[sS][tT][eE][aA][mM] ]]; then
+				_tmuxsock="${AVORION_SERVICEDIR}/sockets/steamcmd.sock"
+
+			elif systemctl status avorion@"$_tmuxsess" >/dev/null 2>&1 || systemctl status "${_tmuxsess}.service" >/dev/null 2>&1; then
+				_tmuxsock="${AVORION_SERVICEDIR}/sockets/${_tmuxsess}.sock"
+			else
+				echo "$_tmuxsess is not a valid instance"
 				return 1
-			}
-			
-			_tmuxcmd="$(which tmux) -S ${AVORION_SERVICEDIR}/sockets/${_tmuxsess}.sock"
+			fi
 		fi
 
 		case "$1" in 
 			attach)
-				"$_tmuxcmd" attach-session -t "$_tmuxsess"
+				"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" attach
 				;;
 			
 			view)
-				"$_tmuxcmd" attach-session -t "$_tmuxsess" -r
+				"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" attach -r
 				;;
 			
 			exec)
 				shift; shift
-				"$_tmuxcmd" send-keys "$(printf '%q' "$@")" ENTER \; pipe-pane 'cat > /dev/stdout'
+				"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" send-keys "$@" ENTER \; attach -r
 				;;
 			
 			update)
@@ -53,29 +60,45 @@ if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_
 					return 1
 				}
 
-				mkdir -p /tmp/avorion/updatingavorion.lock >/dev/null 2>&1 || {
+				mkdir -p /tmp/updatingavorion.lock >/dev/null 2>&1 || {
 					echo "Unable to create avorion lockfile! Check /tmp usage."
 					return 1
 				}
 
 				_units="$(systemctl list-units 'avorion@*' | grep 'loaded active running' | awk '{print $1}')"
 				
-				systemctl stop 'avorion@*'
-				systemctl disable 'avorion@*'
+				[[ -n "${_units}" ]] && {
+					while read _inst; do
+						_inst="${_inst%%.service}"; _inst="${_inst##*avorion@}"
+						"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/${_inst}.sock" \
+							send-keys "/say Prepping for server updates. Prepare for reboot" ENTER "/save" ENTER
+					done <<< "${_units}"
+				}
 
-				echo "Updating Avorion"
-				steamcmd '+force_install_dir' ${AVORION_SERVICEDIR}/${AVORION_BINDIR} '+app_update' $AVORION_STEAMID validate '+exit' \
-					| tee "${AVORION_SERVICEDIR}/${AVORION_BINDIR}/steamupdate.log"
+				echo "Updates locked."
+
+				"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/steamcmd.sock" \
+					send-keys "force_install_dir \"${AVORION_SERVICEDIR}/${AVORION_BINDIR}\"" ENTER "app_update \"$AVORION_STEAMID\" validate" ENTER \; \
+					pipe-pane "exec cat > ${AVORION_SERVICEDIR}/steamupdate.log" \;
+
+				tail -n 0 -f "${AVORION_SERVICEDIR}/steamupdate.log" | sed -r '/^[\s]*(Success|Failure)/ q'
 				
-				while read _inst; do
-					systemctl enable avorion@"$_inst"
-					systemctl start avorion@"$_inst"
-				done <<< "${_units}"
+				"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/steamcmd.sock" pipe-pane \;
+
+				[[ -n "${_units}" ]] && {
+					while read _inst; do
+						_inst="${_inst%%.service}"; _inst="${_inst##*avorion@}"
+						"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/${_inst}.sock" \
+							send-keys "/say Rebooting server for updates." ENTER "/save" ENTER "/stop"
+					done <<< "${_units}"
+				}
 
 				rm -rf /tmp/avorion/updatingavorion.lock >/dev/null 2>&1 || {
 					echo "Unable to remove lockfile. Please ensure that the update was finished successfully."
 					return 1
 				}
+				
+				echo "Updates unlocked"
 
 				return 0
 				;;
@@ -86,9 +109,7 @@ if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_
 					return 1
 				fi
 
-				printf '%s\n' \
-					"${_bld}${$_wht}DeepSpace 9.875 -- Service Instances:${_clr}" \
-					"Instance (Service Unit) -- Status"
+				echo "${_bld}${_wht}DeepSpace 9.875 Service Instances:${_clr}"
 
 				find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' -printf '%f\n' | sort | while read -r _sock; do
 					local _instance="${_sock%%.sock*}"
@@ -125,15 +146,15 @@ if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_
 				echo "Usage: avorion-cmd <option> <parameters>"
 				echo "Options:"
 				printf '\t%s\n' \
-					"update: Force a full Avorion server update. Note that this brings the server down for the duration." \
-					"help: This help text"
+					"help: This help text" \
+					"update: Force a full Avorion server update. Note that this brings the server down for the duration."
 				
 				printf '\t%s\n\t\t%s\n' \
 					"attach: Attach to a service instance." \
 						"Example: ${_grn}avorion-cmd attach <instance>${_clr}" \
 					"view: Attach to a service instance in read-only mode." \
 						"Example: ${_grn}avorion-cmd view <instance>${_clr}"
-				
+
 				printf '\t%s\n\t\t%s\n\t\t%s\n' \
 					"exec: Run the specified commands in the service supplied" \
 						"Example: ${_grn}avorion-cmd exec <instance/service> <COMMANDS>" \
