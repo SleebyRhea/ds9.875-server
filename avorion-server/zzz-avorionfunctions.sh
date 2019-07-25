@@ -53,7 +53,7 @@ if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_
 		_wht="$(tput setaf 7)"; _grn="$(tput setaf 2)"
 		_red="$(tput setaf 1)"; _yel="$(tput setaf 3)"
 
-		if [[ ! "$2" =~ (help|update|validate) ]]; then
+		if [[ ! "$1" =~ (help|update|validate) ]]; then
 				_tmuxsess="$2"
 				_tmuxsess="${_tmuxsess//[ _]/\-}"
 				_tmuxsess="${_tmuxsess//[^a-zA-Z0-9\-]/}"
