@@ -2,39 +2,6 @@
 source /etc/avorionsettings.conf
 
 if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP$) ]] || [[ "$(id -u)" == 0 ]]; then
-	function showinstances() {
-		local _bld _clr _grn _red _wht
-		_clr="$(tput sgr0)"; _bld="$(tput bold)"
-		_wht="$(tput setaf 7)"; _grn="$(tput setaf 2)"; _red="$(tput setaf 1)"
-
-		if (( ! "$(find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' | wc -l)" > 0 )); then
-				return 1
-		fi
-
-		printf '%s\n' "${_bld}${$_wht}DeepSpace 9.875 -- Service Instances:${_clr}"
-
-		find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' -printf '%f\n' | sort | while read -r _sock; do
-			local _instance="${_sock%%.sock*}"
-			local _cmd="$(which tmux) -S ${AVORION_SERVICEDIR}/sockets/${_sock} attach -t ${_a}"
-		
-			if systemctl list-units avorion@* 2>&1 | grep -q "^avorion@${_instance}.service " >/dev/null 2>&1 ; then
-				systemctl status avorion@"${_instance}" >/dev/null 2>&1 \
-					&& echo "${_instance} (Avorion) -- ${_grn}Online${_clr}" \
-					|| echo "${_instance} (Avorion) -- ${_red}Offline${_clr}"
-
-			elif [[ "$_instance" =~ ^steam(cmd|cli)$ ]]; then
-				systemctl status "${_instance}" >/dev/null 2>&1 \
-					&& echo "${_instance} -- ${_grn}Online${_clr}" \
-					|| echo "${_instance} -- ${_red}Offline${_clr}"
-
-			else
-				systemctl status "${_instance}" >/dev/null 2>&1 \
-					&& echo "${_instance} -- ${_grn}Online${_clr}" \
-					|| echo "${_instance} -- ${_red}Offline${_clr}"
-			fi
-		done
-	}
-
 	function avorion-cmd () {
 		command -v tmux >/dev/null 2>&1 || {
 			echo "avorion-cmd requires tmux to function! Please run apt install -y tmux"
@@ -53,23 +20,16 @@ if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_
 		_wht="$(tput setaf 7)"; _grn="$(tput setaf 2)"
 		_red="$(tput setaf 1)"; _yel="$(tput setaf 3)"
 
-		if [[ ! "$1" =~ (help|update|validate) ]]; then
-				_tmuxsess="$2"
-				_tmuxsess="${_tmuxsess//[ _]/\-}"
-				_tmuxsess="${_tmuxsess//[^a-zA-Z0-9\-]/}"
+		if [[ ! "$1" =~ (help|update|validate|showinstances) ]]; then
+			_tmuxsess="$2"
+			_tmuxsess="${_tmuxsess//[ _]/\-}"
+			_tmuxsess="${_tmuxsess//[^a-zA-Z0-9\-]/}"
 
-				systemctl status avorion@"$_tmuxsess".service >/dev/null 2>&1 || {
-					echo "$_tmuxsess is not a valid Avorion instance."
-					return 1
-				}
-			#else
-			#	_tmuxsess=steamcli
-			#	systemctl status steamcmd.service >/dev/null 2>&1 || {
-			#		echo "Steam is currently down!"
-			#		return 1
-			#	}
-			#fi
-
+			systemctl status avorion@"$_tmuxsess".service >/dev/null 2>&1 || {
+				echo "$_tmuxsess is not a valid Avorion instance."
+				return 1
+			}
+			
 			_tmuxcmd="$(which tmux) -S ${AVORION_SERVICEDIR}/sockets/${_tmuxsess}.sock"
 		fi
 
@@ -120,6 +80,39 @@ if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_
 				return 0
 				;;
 			
+			showinstances)
+				if (( ! "$(find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' | wc -l)" > 0 )); then
+					echo "No service instances running"
+					return 1
+				fi
+
+				printf '%s\n' \
+					"${_bld}${$_wht}DeepSpace 9.875 -- Service Instances:${_clr}" \
+					"Instance (Service Unit) -- Status"
+
+				find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' -printf '%f\n' | sort | while read -r _sock; do
+					local _instance="${_sock%%.sock*}"
+				
+					if systemctl list-units avorion@* 2>&1 | grep -q "^avorion@${_instance}.service " >/dev/null 2>&1 ; then
+						systemctl status avorion@"${_instance}" >/dev/null 2>&1 \
+							&& echo "${_instance} (avorion@${_instance}) -- ${_grn}Online${_clr}" \
+							|| echo "${_instance} (avorion@${_instance}) -- ${_red}Offline${_clr}"
+
+					elif [[ "$_instance" =~ ^steam(cmd|cli)$ ]]; then
+						systemctl status "${_instance}" >/dev/null 2>&1 \
+							&& echo "${_instance} (steamcmd.service) -- ${_grn}Online${_clr}" \
+							|| echo "${_instance} (steamcmd.service) -- ${_red}Offline${_clr}"
+
+					else
+						if [[ -f "/etc/systemd/system/${_instance}.service" ]]; then
+							systemctl status "${_instance}" >/dev/null 2>&1 \
+								&& echo "${_instance} -- ${_grn}Online${_clr}" \
+								|| echo "${_instance} -- ${_red}Offline${_clr}"
+						fi
+					fi
+				done
+				;;
+
 			backup)
 				echo "TODO: Unimplemented"
 				;;
@@ -129,7 +122,7 @@ if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_
 				;;
 
 			help)
-				echo "Usage: avorioncmd <option> <parameters>"
+				echo "Usage: avorion-cmd <option> <parameters>"
 				echo "Options:"
 				printf '\t%s\n' \
 					"update: Force a full Avorion server update. Note that this brings the server down for the duration." \
@@ -137,19 +130,19 @@ if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_
 				
 				printf '\t%s\n\t\t%s\n' \
 					"attach: Attach to a service instance." \
-						"Example: ${_grn}avorion-cmd attach ds9server${_clr}" \
+						"Example: ${_grn}avorion-cmd attach <instance>${_clr}" \
 					"view: Attach to a service instance in read-only mode." \
-						"Example: ${_grn}avorion-cmd view ds9server${_clr}"
+						"Example: ${_grn}avorion-cmd view <instance>${_clr}"
 				
 				printf '\t%s\n\t\t%s\n\t\t%s\n' \
 					"exec: Run the specified commands in the service supplied" \
-						"Example: ${_grn}avorion-cmd exec ds9server <COMMANDS>" \
-						"${_red}WARNING:${_clr} Untested, and may be buggy, please dont use this for large Lua scripts commands until further tested." \
+						"Example: ${_grn}avorion-cmd exec <instance/service> <COMMANDS>" \
+						"${_red}WARNING:${_clr} Unfinished/Untested and may be buggy, please dont use this for large Lua scripts commands until further tested." \
 					"backup: Force a backup run of the given instance" \
-						"Example: ${_grn}avorion-cmd backup ds9server${_clr}" \
+						"Example: ${_grn}avorion-cmd backup <instance>${_clr}" \
 						"${_yel}NOTICE:${_clr} Unimplemented at this time." \
 					"resetsector: Reset the given sector/sectors for a server instance" \
-						"Example: ${_grn}avorion-cmd resetsector x y${_clr}" \
+						"Example: ${_grn}avorion-cmd resetsector <instance> x y${_clr}" \
 						"${_yel}NOTICE:${_clr} Unimplemented at this time."
 					
 					return 0
@@ -162,6 +155,6 @@ if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_
 		esac
 	}
 
-	showinstances
+	avorion-cmd showinstances
 fi
 
