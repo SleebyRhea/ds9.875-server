@@ -4,7 +4,10 @@ if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_
 	exit 1
 fi
 
-source /etc/avorionsettings.conf
+if [[ ! -f /etc/avorionsettings.conf ]]; then
+       echo "Cant source Avorion settings! </etc/avorionsettings.conf>  file not found!"
+       exit 1
+fi
 
 command -v tmux >/dev/null 2>&1 || {
 	echo "avorion-cmd requires tmux to function! Please run apt install -y tmux"
@@ -16,10 +19,14 @@ if ! { [[ -z "$TMUX" ]] && [[ ! "$TERM" =~ ^(screen|tmux) ]] && [[ -z "$TMUX_PAN
 	exit 1
 fi
 
+if [[ -z "$1" ]]; then
+	echo "Usage: avorion-cmd <options> <parameters>"
+	exit 1
+fi
 #####
 
-local _tmuxsess _tmuxsock _tmuxconf _tmuxcmd
-local _bld _clr _grn _red _wht _yel
+source /etc/avorionsettings.conf
+
 _clr="$(tput sgr0)"; _bld="$(tput bold)";
 _wht="$(tput setaf 7)"; _grn="$(tput setaf 2)"
 _red="$(tput setaf 1)"; _yel="$(tput setaf 3)"
@@ -86,7 +93,7 @@ case "$1" in
 			send-keys "force_install_dir \"${AVORION_SERVICEDIR}/${AVORION_BINDIR}\"" ENTER "app_update \"$AVORION_STEAMID\" validate" ENTER \; \
 			pipe-pane "exec cat > ${AVORION_SERVICEDIR}/steamupdate.log" \;
 
-		tail -n 0 -f "${AVORION_SERVICEDIR}/steamupdate.log" | sed -r '/^[\s]*(Success|Failure)/ q'
+		tail -n 100 -f "${AVORION_SERVICEDIR}/steamupdate.log" | sed -r '/^[\s]*(Success|Failure)/ q'
 		
 		"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/steamcmd.sock" pipe-pane \;
 
@@ -154,7 +161,7 @@ case "$1" in
 		echo "Options:"
 		printf '\t%s\n' \
 			"help: This help text" \
-			"update: Force a full Avorion server update. Note that this brings the server down for the duration."
+			"update: Force a full Avorion server update. Note that this brings the server down following the update."
 		
 		printf '\t%s\n\t\t%s\n' \
 			"attach: Attach to a service instance." \
