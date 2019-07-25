@@ -1,9 +1,4 @@
 #!/bin/bash
-if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP$) ]] || [[ "$(id -u)" == 0 ]]; then
-	echo "This command can only be run by a ds9 admin or root."
-	exit 1
-fi
-
 if [[ ! -f /etc/avorionsettings.conf ]]; then
        echo "Cant source Avorion settings! </etc/avorionsettings.conf>  file not found!"
        exit 1
@@ -26,6 +21,11 @@ fi
 #####
 
 source /etc/avorionsettings.conf
+
+if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP$) ]] || [[ "$(id -u)" != 0 ]]; then
+	echo "This command can only be run by a ds9 admin or root."
+	exit 1
+fi
 
 _clr="$(tput sgr0)"; _bld="$(tput bold)";
 _wht="$(tput setaf 7)"; _grn="$(tput setaf 2)"
