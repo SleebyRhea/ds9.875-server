@@ -1,4 +1,10 @@
-#!/bin/bash
+#! /env/bin/env bash
+
+if [[ $# -eq 0 ]]; then
+	echo "Usage: avorion-cmd <options> <parameters>"
+	exit 1
+fi
+
 if [[ ! -f /etc/avorionsettings.conf ]]; then
        echo "Cant source Avorion settings! </etc/avorionsettings.conf>  file not found!"
        exit 1
@@ -14,15 +20,11 @@ if ! { [[ -z "$TMUX" ]] && [[ ! "$TERM" =~ ^(screen|tmux) ]] && [[ -z "$TMUX_PAN
 	exit 1
 fi
 
-if [[ -z "$1" ]]; then
-	echo "Usage: avorion-cmd <options> <parameters>"
-	exit 1
-fi
 #####
 
 source /etc/avorionsettings.conf
 
-if [[ "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP$) ]] || [[ "$(id -u)" != 0 ]]; then
+if [[ ! "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP$) ]] && [[ "$(id -u)" != 0 ]]; then
 	echo "This command can only be run by a ds9 admin or root."
 	exit 1
 fi
