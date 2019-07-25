@@ -1,4 +1,4 @@
-#! /env/bin/env bash
+#! /usr/bin/env bash
 
 if [[ $# -eq 0 ]]; then
 	echo "Usage: avorion-cmd <options> <parameters>"
