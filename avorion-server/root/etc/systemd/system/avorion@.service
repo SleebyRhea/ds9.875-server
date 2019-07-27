@@ -25,6 +25,3 @@ ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock send-keys -t avorion-%i '
 
 Restart=always
 RestartSec=10s
-
-[Install]
-WantedBy=multi-user.target
