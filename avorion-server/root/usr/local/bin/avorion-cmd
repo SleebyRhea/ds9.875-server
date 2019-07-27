@@ -1,26 +1,55 @@
 #! /usr/bin/env bash
 
-if [[ $# -eq 0 ]]; then
-	echo "Usage: avorion-cmd <options> <parameters>"
-	exit 1
-fi
-
-if [[ ! -f /etc/avorionsettings.conf ]]; then
-       echo "Cant source Avorion settings! </etc/avorionsettings.conf>  file not found!"
-       exit 1
-fi
-
-command -v tmux >/dev/null 2>&1 || {
-	echo "avorion-cmd requires tmux to function! Please run apt install -y tmux"
+# void say <string, ...>
+#	Ouput the strings passed to stdout and return
+function say () {
+	echo "$1"
 	exit 1
 }
 
-if ! { [[ -z "$TMUX" ]] && [[ ! "$TERM" =~ ^(screen|tmux) ]] && [[ -z "$TMUX_PANE" ]]; }; then
-	echo "This command should not be run from within a Screen/Tmux session"
+# int die <options> <string, ...>
+#	Output the strings passed to stdout then exit
+#	with status code 1 (or the code given w
+function die () {
+	echo "$1"
 	exit 1
+}
+
+
+##############
+# Pre-Checks #
+##############
+
+# Die if there are no arguments passed
+[[ $# -eq 0 ]] \
+	|| die "Usage: avorion-cmd <options> <parameters>"
+
+# Die if tmux is not installed
+command -v tmux >/dev/null 2>&1 \
+	|| die "avorion-cmd requires tmux to function! Please run apt install -y tmux"
+
+# Die if we are running in a screen or tmux session.
+# TODO: Migrate check to functions that operate on TMUX sessions
+if ! { [[ -z "$TMUX" ]] && [[ ! "$TERM" =~ ^(screen|tmux) ]] && [[ -z "$TMUX_PANE" ]]; }; then
+	die "This command should not be run from within a Screen/Tmux session"
+fi
+
+# Die if the settings file is NOT present
+if [[ ! -f /etc/avorionsettings.conf ]]; then
+   die "Cant source Avorion settings! </etc/avorionsettings.conf>  file not found!"
 fi
 
 #####
+
+function __verify_settings_conf () {
+	local -a __conf_vars=( AVORION_ADMIN_GRP AVORION_SERVICEDIR AVORION_BINDIR AVORION_STEAMID )
+	local -a __conf_regx=( '[a-z]{4,}' '[a-zA-Z0-9_\-]{1,}' '[a-zA-Z0-9_\-]{1,}' '[0-9]{2,}' )
+	local __use_defaults
+
+	grep -cvE "^($(printf '%s' "${__conf_vars[*]}" | tr ' ' '|')|)" >/dev/null || {
+		__use_defaults=1
+	}
+}
 
 source /etc/avorionsettings.conf
 
@@ -28,7 +57,7 @@ if [[ ! "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMI
 	echo "This command can only be run by a ds9 admin or root."
 	exit 1
 fi
-
+#
 _clr="$(tput sgr0)"; _bld="$(tput bold)";
 _wht="$(tput setaf 7)"; _grn="$(tput setaf 2)"
 _red="$(tput setaf 1)"; _yel="$(tput setaf 3)"
