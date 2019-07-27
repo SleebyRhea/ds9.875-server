@@ -54,11 +54,10 @@ function __verify_settings_conf () {
 source /etc/avorionsettings.conf
 
 if [[ ! "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP$) ]] && [[ "$(id -u)" != 0 ]]; then
-	echo "This command can only be run by a ds9 admin or root."
-	exit 1
+	die "This command can only be run by a ds9 admin or root."
 fi
-#
-_clr="$(tput sgr0)"; _bld="$(tput bold)";
+
+_clr="$(tput sgr0)";    _bld="$(tput bold)"
 _wht="$(tput setaf 7)"; _grn="$(tput setaf 2)"
 _red="$(tput setaf 1)"; _yel="$(tput setaf 3)"
 
@@ -98,15 +97,11 @@ case "$1" in
 		;;
 	
 	update)
-		[[ -d "/tmp/avorion/updatingavorion.lock" ]] && {
-			echo "Update process already running"
-			exit 1
-		}
+		[[ -d "/tmp/avorion/updatingavorion.lock" ]] \
+			&& die "Update process already running"
 
-		mkdir -p /tmp/updatingavorion.lock >/dev/null 2>&1 || {
-			echo "Unable to create avorion lockfile! Check /tmp usage."
-			exit 1
-		}
+		mkdir -p /tmp/updatingavorion.lock >/dev/null 2>&1 \
+			|| echo "Unable to create avorion lockfile! Check /tmp usage."
 
 		_units="$(systemctl list-units 'avorion@*' | grep 'loaded active running' | awk '{print $1}')"
 		
