@@ -22,23 +22,22 @@ function onStartUp()
     local tr, tt = 2, WeaponType.RawMiningLaser
 
     turret = include("turretgenerator").generate(yx, ty, to, Rarity(tr), tt, Material(MaterialType.Naonite))
-    turret.dps=10
 end
 
 function onPlayerCreated (index)
     -- Call vanilla script
-    vanilla_onPlayerLogIn(index)
+    vanilla_onPlayerCreated(index)
 
     local player = Player(index)
 
     -- Resources (example)
-    local iron, titanium, naonite, trinium, xanion, ogonite, avorion = 100, 100, 140, 2876, 1765, 285, 12 
+    local iron, titanium, naonite, trinium, xanion, ogonite, avorion = 50000, 50000, 50000, 50000, 0, 0, 0
 
     local mail = Mail()
-    mail.money = 10000
-    mail.sender = "DeepSpace 9.875"
-    mail.header = "Greetings Tester!!"
-    mail.text = "Welcome to the DS9 Testing Server!"
+    mail.money = 500000
+    mail.sender = "DS9 Admin Team"
+    mail.header = "Welcome!"
+    mail.text = "Welcome to the DS9.875 Server! Here are some resources to get you going. If you have any questions, feel free to ask!"
     mail:addTurret(turret)
     mail:setResources(iron,titanium,naonite,trinium,xanion,ogonite,avorion)
 
