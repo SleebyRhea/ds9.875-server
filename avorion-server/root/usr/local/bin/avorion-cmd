@@ -333,7 +333,7 @@ function main () {
 				    Force a game update. Not usually necessary as simply restarting the server
 					should accomplish this.
 			_EOF_
-				exit 0
+			exit 0
 			;;
 
 		?)
