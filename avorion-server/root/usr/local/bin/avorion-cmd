@@ -104,7 +104,10 @@ function __validate_setting_conf () {
 	return 0
 }
 
-function __validate_instance () {
+function __set_instance () {
+	[[ -z "$1" ]] \
+		|| return 1
+
 	_tmuxsess="$1"
 	_tmuxsess="${_tmuxsess//[ _]/\-}"
 	_tmuxsess="${_tmuxsess//[^a-zA-Z0-9\-]/}"
@@ -213,7 +216,7 @@ function __set_globals () {
 	readonly _tmuxconf=/etc/avorioncmd-tmux.conf
 	readonly _tmuxcmd="$(which tmux)"
 
-	declare _tmuxsess _tmuxsock
+	declare _tmuxsess _tmuxsock _instdir
 }
 
 function main () {
@@ -225,7 +228,7 @@ function main () {
 
 	case "$1" in 
 		attach)
-			__validate_instance "$2" \
+			__set_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
 			"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" attach \
@@ -234,7 +237,7 @@ function main () {
 			;;
 		
 		view)
-			__validate_instance "$2" \
+			__set_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
 			"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" attach -r \
@@ -243,7 +246,7 @@ function main () {
 			;;
 		
 		exec)
-			__validate_instance "$2" \
+			__set_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
 			shift; shift
@@ -265,43 +268,71 @@ function main () {
 			;;
 
 		backup)
-			__perform_backup \
+			__get_instance_dir \
+				|| die "${__err_bad_inst} <$2>"
+
+			__perform_backup "$_instdir" \
 				|| exit 1 \
 				&& exit 0
 			;;
 
 		resetsector)
-			__validate_instance "$2"
-			__perform_sector_reset \
+			__set_instance "$2" \
+				|| die "${__err_bad_inst} <$2>"
+
+			shift; shift
+			__perform_sector_reset "$@"\
 				|| exit 1 \
 				&& exit 0
 			;;
 
 		help)
-			echo "Usage: avorion-cmd <option> <parameters>"
-			echo "Options:"
-			printf '\t%s\n' \
-				"help: This help text" \
-				"update: Force a full Avorion server update. Note that this brings the server down following the update." \
-				"showinstances: Display a listing of all Avorion/Steam instances"
+			cat <<- _EOF_
+			Usage: ${CMDNAME} <command> <optons> <parameters>
 			
-			printf '\t%s\n\t\t%s\n' \
-				"attach: Attach to a service instance." \
-					"Example: ${_grn}avorion-cmd attach <instance>${_clr}" \
-				"view: Attach to a service instance in read-only mode." \
-					"Example: ${_grn}avorion-cmd view <instance>${_clr}"
+			Commands:
+			    showinstances
+				    Display a listing of all Avorion/Steam instances
+			    
+				help
+				    This help text
+			    
+				usage
+				    Print the usage text
 
-			printf '\t%s\n\t\t%s\n\t\t%s\n' \
-				"exec: Run the specified commands in the service supplied" \
-					"Example: ${_grn}avorion-cmd exec <instance/service> <COMMANDS>" \
-					"${_red}WARNING:${_clr} Unfinished/Untested and may be buggy, please dont use this for large Lua scripts commands until further tested." \
-				"backup: Force a backup run of the given instance" \
-					"Example: ${_grn}avorion-cmd backup <instance>${_clr}" \
-					"${_yel}NOTICE:${_clr} Unimplemented at this time." \
-				"resetsector: Reset the given sector/sectors for a server instance" \
-					"Example: ${_grn}avorion-cmd resetsector <instance> x y${_clr}" \
-					"${_yel}NOTICE:${_clr} Unimplemented at this time."
+			    start
+				    Start the given Avorion instance
+			        ${_grn}${CMDNAME} start <instance>${_clr}
+
+			    restart
+				    Restart the given instance
+			        ${_grn}${CMDNAME} restart <instance>${_clr}
 				
+				stop
+				    Stop the given instance. Unlike when used in game, this will prevent
+				    the game from restarting following the 30 second window. Use this when
+				    configuration changes need to be made.
+				    ${_grn}${CMDNAME} stop <instance>${_clr}
+			    
+				exec
+			        Pass the given commands into the instance server session.
+					${_grn}${CMDNAME} exec <instance> <commands>${_clr}
+				    ${_red}WARNING:${_clr} Unfinished/Untested and may be buggy, please dont use this for large Lua scripts commands until further tested.	
+
+				resetsectors
+				    Reset the given sectors.
+					${_grn}${CMDNAME} resetsectors <instance> <x:y, ...>${_clr}
+			        ${_yel}NOTICE: Not currently implemented${_clr}
+				
+				backup
+				    Take a backup of the given instance.
+				    ${_grn}${CMDNAME} backup <instance>${_clr}
+			        ${_yel}NOTICE: Not currently implemented${_clr}
+				
+				update
+				    Force a game update. Not usually necessary as simply restarting the server
+					should accomplish this.
+			_EOF_
 				exit 0
 			;;
 
