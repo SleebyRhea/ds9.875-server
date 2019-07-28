@@ -4,52 +4,67 @@
 #	Ouput the strings passed to stdout and return
 function say () {
 	echo "$1"
-	exit 1
+	return 0
 }
 
 # int die <options> <string, ...>
 #	Output the strings passed to stdout then exit
 #	with status code 1 (or the code given w
 function die () {
-	echo "$1"
+	say "Error: $1"
 	exit 1
 }
 
+# int __validate_process_exec <ARGV>
+#	Run various pre-checks prior to running the main
+#	script body to ensure that the process execution
+#	is both valid, and that all of the required pkgs
+#	have been installed. If any of these pre-checks
+#	fail, exit the script with error code 1 and give
+#	an explanation.
+function __assert_valid_execution () {
+	# Die if there are no arguments passed
+	[[ $# -eq 0 ]] \
+		|| die "Usage: avorion-cmd <options> <parameters>"
 
-##############
-# Pre-Checks #
-##############
+	# Die if tmux is not installed
+	command -v tmux >/dev/null 2>&1 \
+		|| die "avorion-cmd requires tmux to function! Please run apt install -y tmux"
 
-# Die if there are no arguments passed
-[[ $# -eq 0 ]] \
-	|| die "Usage: avorion-cmd <options> <parameters>"
+	# Die if we are running in a screen or tmux session.
+	# TODO: Migrate check to functions that operate on TMUX sessions
+	if ! { [[ -z "$TMUX" ]] && [[ ! "$TERM" =~ ^(screen|tmux) ]] && [[ -z "$TMUX_PANE" ]]; }; then
+		die "This command should not be run from within a Screen/Tmux session"
+	fi
 
-# Die if tmux is not installed
-command -v tmux >/dev/null 2>&1 \
-	|| die "avorion-cmd requires tmux to function! Please run apt install -y tmux"
+	# Make sure the user is part of the admin group or is root
+	if [[ ! "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP$) ]] && [[ "$(id -u)" != 0 ]]; then
+		die "This command can only be run by a ds9 admin or root."
+	fi
+}
 
-# Die if we are running in a screen or tmux session.
-# TODO: Migrate check to functions that operate on TMUX sessions
-if ! { [[ -z "$TMUX" ]] && [[ ! "$TERM" =~ ^(screen|tmux) ]] && [[ -z "$TMUX_PANE" ]]; }; then
-	die "This command should not be run from within a Screen/Tmux session"
-fi
+# int __validate_setting_conf <void>
+#	Run validation checks on the configuration file.
+#	This function checks all of the non-blank lines
+#	present in the conf file and ensures that they
+#	are both valid configs, and that the settings
+#	provided are valid.
+function __validate_setting_conf () {
+	[[ -f /etc/avorionsettings.conf ]] \
+		|| die "Avorion configuration file not found"
 
-# Die if the settings file is NOT present
-if [[ ! -f /etc/avorionsettings.conf ]]; then
-   die "Cant source Avorion settings! </etc/avorionsettings.conf>  file not found!"
-fi
-
-#####
-
-function __validate_settings_conf () {
 	local -A __conf_vars
+	local __bad_symbols
+	__bad_symbols="[\\&^s\(\)%\[\]\#@!<>\'\",;:\{\}]"
 	__conf_vars[AVORION_ADMIN_GRP]='[a-z]{4,}'
 	__conf_vars[AVORION_SERVICEDIR]='[a-zA-Z0-9_\-]{1,}'
 	__conf_vars[AVORION_BINDIR]='[a-zA-Z0-9_\-]{1,}'
 	__conf_vars[AVORION_STEAMID]='[0-9]{2,}'
 
-	grep -qcvE "^(($(printf '%s' "${!__conf_vars[*]}" | tr ' ' '|'))=.*|\\s*)" >/dev/null \
-		|| return 1
+	# Leaving this here for now, but this used to check for invalid options
+	# being set in the configuration file
+	# grep -qcvE "^(($(printf '%s' "${!__conf_vars[*]}" | tr ' ' '|'))=.*|\\s*)" /etc/avorionsettings.conf >/dev/null \
+	#	|| return 1
 
 	local i=0
 	while read -r __l; do
@@ -58,39 +73,39 @@ function __validate_settings_conf () {
 		# Set line count
 		((i++))
 		
-		# We dont case about blank lines, so skip those
+		# We dont care about blank lines, so skip those
 		[[ "$__l" =~ ^\s*$ ]] \
 			&& continue
+
+		# Ensure the line contains no invalid symbols
+		[[ "$__l" =~ $__bad_symbols ]] \
+			&& die "${__err} -- Invalid chars present: <${__l}>"
 		
+		# Ensure that the variable declaration syntax is valid
 		[[ "$__l" =~ ^([\s]+)=([\s]+)$ ]] \
 			|| die "${__err} -- Bad syntax: <${__l}>"
 
+		# Ensure that the variable being declared is actually
+		# a setting that we will be making use of.
 		[[ -z "${__conf_vars["${BASH_REMATCH[1]}"]}" ]] \
 			&& die "${__err} -- Invalid setting: <${BASH_REMATCH[1]}>"
 
+		# Make sure that the values given to the variable match a
+		# set syntax.
+		#
+		# TODO: Perform some deeper checks here. IE, we would
+		#       want to catch things like having the admin grp
+		#       set to sudo.
 		[[ "${BASH_REMATCH[2]}" =~ ${__conf_vars[${BASH_REMATCH[1]}]} ]] \
-			|| die "${__err} -- Invalid option passed: <$__l>"
+			|| die "${__err} -- Invalid assignment: <$__l>"
 
 	done < /etc/avorionsettings.conf
 	
 	return 0
 }
 
-source /etc/avorionsettings.conf
-
-if [[ ! "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP$) ]] && [[ "$(id -u)" != 0 ]]; then
-	die "This command can only be run by a ds9 admin or root."
-fi
-
-_clr="$(tput sgr0)";    _bld="$(tput bold)"
-_wht="$(tput setaf 7)"; _grn="$(tput setaf 2)"
-_red="$(tput setaf 1)"; _yel="$(tput setaf 3)"
-
-_tmuxconf=/etc/avorioncmd-tmux.conf
-_tmuxcmd="$(which tmux)"
-
-if [[ ! "$1" =~ (help|update|validate|showinstances) ]]; then
-	_tmuxsess="$2"
+function __validate_instance () {
+	_tmuxsess="$1"
 	_tmuxsess="${_tmuxsess//[ _]/\-}"
 	_tmuxsess="${_tmuxsess//[^a-zA-Z0-9\-]/}"
 
@@ -102,141 +117,199 @@ if [[ ! "$1" =~ (help|update|validate|showinstances) ]]; then
 		echo "$_tmuxsess is not a valid instance"
 		exit 1
 	fi
-fi
+}
 
-case "$1" in 
-	attach)
-		"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" attach || exit 1
-		exit 0
-		;;
+function __perform_update () {
+	[[ -d "/tmp/avorion/updatingavorion.lock" ]] \
+		&& die "Update process already running"
+
+	mkdir -p /tmp/updatingavorion.lock >/dev/null 2>&1 \
+		|| echo "Unable to create avorion lockfile! Check /tmp usage."
+
+	_units="$(systemctl list-units 'avorion@*' | grep -E '^avorion@[^\s]+.service loaded active running' | awk '{print $1}')"
 	
-	view)
-		"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" attach -r || exit 1
-		exit 0
-		;;
+	[[ -n "${_units}" ]] && {
+		while read _inst; do
+			_inst="${_inst%%.service}"; _inst="${_inst##*avorion@}"
+			"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/${_inst}.sock" \
+				send-keys "/say Prepping for server updates. Prepare for reboot" ENTER "/save" ENTER
+		done <<< "${_units}"
+	}
+
+	echo "Updates locked."
+
+	"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/steamcmd.sock" \
+		send-keys "force_install_dir \"${AVORION_SERVICEDIR}/${AVORION_BINDIR}\"" ENTER "app_update \"$AVORION_STEAMID\" validate" ENTER \; \
+		pipe-pane "exec cat > ${AVORION_SERVICEDIR}/steamupdate.log" \;
+
+	tail -n 100 -f "${AVORION_SERVICEDIR}/steamupdate.log" | sed -r '/^[\s]*(Success|Failure)/ q'
 	
-	exec)
-		shift; shift
-		"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" send-keys "$@" ENTER \; attach -r || exit 1
-		exit 0
-		;;
-	
-	update)
-		[[ -d "/tmp/avorion/updatingavorion.lock" ]] \
-			&& die "Update process already running"
+	"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/steamcmd.sock" pipe-pane \;
 
-		mkdir -p /tmp/updatingavorion.lock >/dev/null 2>&1 \
-			|| echo "Unable to create avorion lockfile! Check /tmp usage."
+	[[ -n "${_units}" ]] && {
+		while read _inst; do
+			_inst="${_inst%%.service}"; _inst="${_inst##*avorion@}"
+			"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/${_inst}.sock" \
+				send-keys "/say Rebooting server for updates." ENTER "/save" ENTER "/stop"
+		done <<< "${_units}"
+	}
 
-		_units="$(systemctl list-units 'avorion@*' | grep 'loaded active running' | awk '{print $1}')"
-		
-		[[ -n "${_units}" ]] && {
-			while read _inst; do
-				_inst="${_inst%%.service}"; _inst="${_inst##*avorion@}"
-				"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/${_inst}.sock" \
-					send-keys "/say Prepping for server updates. Prepare for reboot" ENTER "/save" ENTER
-			done <<< "${_units}"
-		}
-
-		echo "Updates locked."
-
-		"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/steamcmd.sock" \
-			send-keys "force_install_dir \"${AVORION_SERVICEDIR}/${AVORION_BINDIR}\"" ENTER "app_update \"$AVORION_STEAMID\" validate" ENTER \; \
-			pipe-pane "exec cat > ${AVORION_SERVICEDIR}/steamupdate.log" \;
-
-		tail -n 100 -f "${AVORION_SERVICEDIR}/steamupdate.log" | sed -r '/^[\s]*(Success|Failure)/ q'
-		
-		"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/steamcmd.sock" pipe-pane \;
-
-		[[ -n "${_units}" ]] && {
-			while read _inst; do
-				_inst="${_inst%%.service}"; _inst="${_inst##*avorion@}"
-				"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/${_inst}.sock" \
-					send-keys "/say Rebooting server for updates." ENTER "/save" ENTER "/stop"
-			done <<< "${_units}"
-		}
-
-		rm -rf /tmp/avorion/updatingavorion.lock >/dev/null 2>&1 || {
-			echo "Unable to remove lockfile. Please ensure that the update was finished successfully."
-			exit 1
-		}
-		
-		echo "Updates unlocked"
-
-		exit 0
-		;;
-	
-	showinstances)
-		if (( ! "$(find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' | wc -l)" > 0 )); then
-			echo "No service instances running"
-			exit 1
-		fi
-
-		echo "${_bld}${_wht}DeepSpace 9.875 Service Instances:${_clr}"
-
-		find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' -printf '%f\n' | sort | while read -r _sock; do
-			local _instance="${_sock%%.sock*}"
-		
-			if systemctl list-units avorion@* 2>&1 | grep -q "^avorion@${_instance}.service " >/dev/null 2>&1 ; then
-				systemctl status avorion@"${_instance}" >/dev/null 2>&1 \
-					&& echo "${_instance} (avorion@${_instance}) -- ${_grn}Online${_clr}" \
-					|| echo "${_instance} (avorion@${_instance}) -- ${_red}Offline${_clr}"
-
-			elif [[ "$_instance" =~ ^steam(cmd|cli)$ ]]; then
-				systemctl status "${_instance}" >/dev/null 2>&1 \
-					&& echo "${_instance} (steamcmd.service) -- ${_grn}Online${_clr}" \
-					|| echo "${_instance} (steamcmd.service) -- ${_red}Offline${_clr}"
-
-			else
-				if [[ -f "/etc/systemd/system/${_instance}.service" ]]; then
-					systemctl status "${_instance}" >/dev/null 2>&1 \
-						&& echo "${_instance} -- ${_grn}Online${_clr}" \
-						|| echo "${_instance} -- ${_red}Offline${_clr}"
-				fi
-			fi
-		done
-		;;
-
-	backup)
-		echo "TODO: Unimplemented"
-		exit 0
-		;;
-
-	resetsector)
-		echo "TODO: Unimplemented"
-		exit 0
-		;;
-
-	help)
-		echo "Usage: avorion-cmd <option> <parameters>"
-		echo "Options:"
-		printf '\t%s\n' \
-			"help: This help text" \
-			"update: Force a full Avorion server update. Note that this brings the server down following the update." \
-			"showinstances: Display a listing of all Avorion/Steam instances"
-		
-		printf '\t%s\n\t\t%s\n' \
-			"attach: Attach to a service instance." \
-				"Example: ${_grn}avorion-cmd attach <instance>${_clr}" \
-			"view: Attach to a service instance in read-only mode." \
-				"Example: ${_grn}avorion-cmd view <instance>${_clr}"
-
-		printf '\t%s\n\t\t%s\n\t\t%s\n' \
-			"exec: Run the specified commands in the service supplied" \
-				"Example: ${_grn}avorion-cmd exec <instance/service> <COMMANDS>" \
-				"${_red}WARNING:${_clr} Unfinished/Untested and may be buggy, please dont use this for large Lua scripts commands until further tested." \
-			"backup: Force a backup run of the given instance" \
-				"Example: ${_grn}avorion-cmd backup <instance>${_clr}" \
-				"${_yel}NOTICE:${_clr} Unimplemented at this time." \
-			"resetsector: Reset the given sector/sectors for a server instance" \
-				"Example: ${_grn}avorion-cmd resetsector <instance> x y${_clr}" \
-				"${_yel}NOTICE:${_clr} Unimplemented at this time."
-			
-			exit 0
-		;;
-
-	?)
-		printf '%s\n' "Invalid argument passed: <$(printf '%q' "$1")>"
+	rm -rf /tmp/avorion/updatingavorion.lock >/dev/null 2>&1 || {
+		echo "Unable to remove lockfile. Please ensure that the update was finished successfully."
 		exit 1
-		;;
-esac
+	}
+	
+	echo "Updates unlocked"
+
+	exit 0
+}
+
+function __perform_backup () {
+	true
+}
+
+function __perform_sector_reset () {
+	true
+}
+
+function __show_service_instances () {
+	if (( ! "$(find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' | wc -l)" > 0 )); then
+		echo "No service instances running"
+		exit 1
+	fi
+
+	echo "${_bld}${_wht}DeepSpace 9.875 Service Instances:${_clr}"
+
+	find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' -printf '%f\n' | sort | while read -r _sock; do
+		local _instance="${_sock%%.sock*}"
+	
+		if systemctl list-units avorion@* 2>&1 | grep -q "^avorion@${_instance}.service " >/dev/null 2>&1 ; then
+			systemctl status avorion@"${_instance}" >/dev/null 2>&1 \
+				&& echo "${_instance} (avorion@${_instance}) -- ${_grn}Online${_clr}" \
+				|| echo "${_instance} (avorion@${_instance}) -- ${_red}Offline${_clr}"
+
+		elif [[ "$_instance" =~ ^steam(cmd|cli)$ ]]; then
+			systemctl status "${_instance}" >/dev/null 2>&1 \
+				&& echo "${_instance} (steamcmd.service) -- ${_grn}Online${_clr}" \
+				|| echo "${_instance} (steamcmd.service) -- ${_red}Offline${_clr}"
+
+		else
+			if [[ -f "/etc/systemd/system/${_instance}.service" ]]; then
+				systemctl status "${_instance}" >/dev/null 2>&1 \
+					&& echo "${_instance} -- ${_grn}Online${_clr}" \
+					|| echo "${_instance} -- ${_red}Offline${_clr}"
+			fi
+		fi
+	done
+}
+
+function __set_globals () {
+	readonly _clr="$(tput sgr0)"
+	readonly _bld="$(tput bold)"
+	readonly _red="$(tput setaf 1)"
+	readonly _grn="$(tput setaf 2)"
+	readonly _yel="$(tput setaf 3)"
+	readonly _wht="$(tput setaf 7)"
+	readonly _tmuxconf=/etc/avorioncmd-tmux.conf
+	readonly _tmuxcmd="$(which tmux)"
+
+	declare _tmuxsess _tmuxsock
+}
+
+function main () {
+	__validate_setting_conf && source /etc/avorionsettings.conf
+	__assert_valid_execution
+	__set_globals
+
+	local __err_bad_inst='Invalid instance passed:'
+
+	case "$1" in 
+		attach)
+			__validate_instance "$2" \
+				|| die "${__err_bad_inst} <$2>"
+
+			"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" attach \
+				|| exit 1 \
+				&& exit 0
+			;;
+		
+		view)
+			__validate_instance "$2" \
+				|| die "${__err_bad_inst} <$2>"
+
+			"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" attach -r \
+				|| exit 1 \
+				&& exit 0
+			;;
+		
+		exec)
+			__validate_instance "$2" \
+				|| die "${__err_bad_inst} <$2>"
+
+			shift; shift
+			"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" send-keys "$@" ENTER \; attach -r \
+				|| exit 1 \
+				&& exit 0
+			;;
+		
+		update)
+			__perform_update \
+				|| exit 1 \
+				&& exit 0
+			;;
+		
+		showinstances)
+			__show_service_instances \
+				|| exit 1 \
+				&& exit 0
+			;;
+
+		backup)
+			__perform_backup \
+				|| exit 1 \
+				&& exit 0
+			;;
+
+		resetsector)
+			__validate_instance "$2"
+			__perform_sector_reset \
+				|| exit 1 \
+				&& exit 0
+			;;
+
+		help)
+			echo "Usage: avorion-cmd <option> <parameters>"
+			echo "Options:"
+			printf '\t%s\n' \
+				"help: This help text" \
+				"update: Force a full Avorion server update. Note that this brings the server down following the update." \
+				"showinstances: Display a listing of all Avorion/Steam instances"
+			
+			printf '\t%s\n\t\t%s\n' \
+				"attach: Attach to a service instance." \
+					"Example: ${_grn}avorion-cmd attach <instance>${_clr}" \
+				"view: Attach to a service instance in read-only mode." \
+					"Example: ${_grn}avorion-cmd view <instance>${_clr}"
+
+			printf '\t%s\n\t\t%s\n\t\t%s\n' \
+				"exec: Run the specified commands in the service supplied" \
+					"Example: ${_grn}avorion-cmd exec <instance/service> <COMMANDS>" \
+					"${_red}WARNING:${_clr} Unfinished/Untested and may be buggy, please dont use this for large Lua scripts commands until further tested." \
+				"backup: Force a backup run of the given instance" \
+					"Example: ${_grn}avorion-cmd backup <instance>${_clr}" \
+					"${_yel}NOTICE:${_clr} Unimplemented at this time." \
+				"resetsector: Reset the given sector/sectors for a server instance" \
+					"Example: ${_grn}avorion-cmd resetsector <instance> x y${_clr}" \
+					"${_yel}NOTICE:${_clr} Unimplemented at this time."
+				
+				exit 0
+			;;
+
+		?)
+			printf '%s\n' "Invalid argument passed: <$1>"
+			exit 1
+			;;
+	esac
+}
+
+main "$@"
