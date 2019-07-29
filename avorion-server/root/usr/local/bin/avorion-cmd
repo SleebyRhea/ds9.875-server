@@ -39,8 +39,17 @@ function __assert_valid_execution () {
 
 	# Make sure the user is part of the admin group or is root
 	if [[ ! "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP$) ]] && [[ "$(id -u)" != 0 ]]; then
-		die "This command can only be run by a ds9 admin or root."
+		die "This command can only be run by a DS9 admin or root."
 	fi
+}
+
+# bool __assert_valid_user_input <string>
+#	Check the string given for bash symbols
+#	and return error if any are found.
+function __assert_valid_user_input () {
+	[[ "$1" =~ [/\\$\&@#\`~=+{}\[\]|\'\"] ]] \
+		&& return 1 \
+		|| return 0
 }
 
 # int __validate_setting_conf <void>
@@ -104,7 +113,7 @@ function __validate_setting_conf () {
 	return 0
 }
 
-function __set_instance () {
+function __set_tmux_instance () {
 	[[ -z "$1" ]] \
 		|| return 1
 
@@ -123,19 +132,22 @@ function __set_instance () {
 }
 
 function __perform_update () {
+
 	[[ -d "/tmp/avorion/updatingavorion.lock" ]] \
 		&& die "Update process already running"
 
 	mkdir -p /tmp/updatingavorion.lock >/dev/null 2>&1 \
 		|| echo "Unable to create avorion lockfile! Check /tmp usage."
 
+	local _units _inst
+
 	_units="$(systemctl list-units 'avorion@*' | grep -E '^avorion@[^\s]+.service loaded active running' | awk '{print $1}')"
 	
 	[[ -n "${_units}" ]] && {
 		while read _inst; do
-			_inst="${_inst%%.service}"; _inst="${_inst##*avorion@}"
-			"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/${_inst}.sock" \
-				send-keys "/say Prepping for server updates. Prepare for reboot" ENTER "/save" ENTER
+			_inst="${_inst%%.service}"
+			echo "Stopping <${__inst}>"
+			sudo -n systemctl stop "${__inst}"
 		done <<< "${_units}"
 	}
 
@@ -145,15 +157,16 @@ function __perform_update () {
 		send-keys "force_install_dir \"${AVORION_SERVICEDIR}/${AVORION_BINDIR}\"" ENTER "app_update \"$AVORION_STEAMID\" validate" ENTER \; \
 		pipe-pane "exec cat > ${AVORION_SERVICEDIR}/steamupdate.log" \;
 
-	tail -n 100 -f "${AVORION_SERVICEDIR}/steamupdate.log" | sed -r '/^[\s]*(Success|Failure)/ q'
+	tail -n 100 -f "${AVORION_SERVICEDIR}/steamupdate.log" 2>&1 | sed -r '/^(Success!|Failure)/ q'
+	echo 'Done'
 	
 	"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/steamcmd.sock" pipe-pane \;
 
 	[[ -n "${_units}" ]] && {
 		while read _inst; do
-			_inst="${_inst%%.service}"; _inst="${_inst##*avorion@}"
-			"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/${_inst}.sock" \
-				send-keys "/say Rebooting server for updates." ENTER "/save" ENTER "/stop"
+			__inst="${_inst%%.service}"
+			echo "Starting <${__inst}>"
+			sudo -n systemctl start "${_inst}"
 		done <<< "${_units}"
 	}
 
@@ -176,6 +189,9 @@ function __perform_sector_reset () {
 }
 
 function __perform_config_edits () {
+	__assert_valid_file "$2" \
+		|| die "Invalid file passed: <$2>" \
+	
 	local __instance="$1"
 	local __file="$2"
 	local __inst_file="${AVORION_SERVICEDIR}/${__instance}/${__file}"
@@ -283,7 +299,7 @@ function main () {
 
 	case "$1" in 
 		attach)
-			__set_instance "$2" \
+			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
 			"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" attach \
@@ -292,7 +308,7 @@ function main () {
 			;;
 		
 		view)
-			__set_instance "$2" \
+			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
 			"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" attach -r \
@@ -301,7 +317,7 @@ function main () {
 			;;
 		
 		exec)
-			__set_instance "$2" \
+			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
 			shift; shift
@@ -332,7 +348,7 @@ function main () {
 			;;
 
 		resetsector)
-			__set_instance "$2" \
+			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
 			shift; shift
@@ -373,6 +389,19 @@ function main () {
 			        Pass the given commands into the instance server session.
 					${_grn}${CMDNAME} exec <instance> <commands>${_clr}
 				    ${_red}WARNING:${_clr} Unfinished/Untested and may be buggy, please dont use this for large Lua scripts commands until further tested.	
+
+				config
+				    Edit the specified configuration file for the Avorion instance given.
+				    ${_grn}${CMDNAME} config <instance> <file>${_clr}
+					
+					Avorion Config Files:
+				        server.ini
+				        modconfig.lua
+						whitelist.txt
+						blacklist.txt
+						admin.xml
+						ipblacklist.txt
+						group-whitelist.txt
 
 				resetsectors
 				    Reset the given sectors.
