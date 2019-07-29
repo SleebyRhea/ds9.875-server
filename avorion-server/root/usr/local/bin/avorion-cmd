@@ -397,11 +397,11 @@ function main () {
 					Avorion Config Files:
 				        server.ini
 				        modconfig.lua
-						whitelist.txt
-						blacklist.txt
-						admin.xml
-						ipblacklist.txt
-						group-whitelist.txt
+			            whitelist.txt
+				        blacklist.txt
+				        admin.xml
+				        ipblacklist.txt
+				        group-whitelist.txt
 
 				resetsectors
 				    Reset the given sectors.
