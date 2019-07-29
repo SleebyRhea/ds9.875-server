@@ -175,6 +175,61 @@ function __perform_sector_reset () {
 	true
 }
 
+function __perform_config_edits () {
+	local __instance="$1"
+	local __file="$2"
+	local __inst_file="${AVORION_SERVICEDIR}/${__instance}/${__file}"
+	local __temp_file="/tmp/avorion-cmd/${__instance}/${__file}.tmp"
+	local __editor
+
+	[[ -w "${__inst_file}" ]] || {
+		say "Unable to edit file: <${__inst_file}>"
+
+		[[ -f "${__inst_file}" ]] \
+			|| die "File does not exist."
+	
+		die "File is not writable. Are the permissions correct?"	
+	}
+
+	if [[ -d "/tmp/avorion-cmd/${__instance}" ]]; then 
+		[[ -f "${__temp_file}" ]] \
+			&& die "Config file is already open by another"
+	else
+		mkdir -p "/tmp/avorion-cmd/${1}" >/dev/null 2>&1 \
+			|| die "Unable to generate tmp directory /tmp/avorion-cmd/${1}"
+	fi
+
+	cp "${__inst_file}" "${__temp_file}" >/dev/null \
+		|| die "Unable to generate temp file for editting"
+
+	if [[ -z "${VISUAL}" ]]; then
+		if [[ -z "${EDITOR}" ]]; then
+			command -v nano >/dev/null 2>&1 \
+				|| __editor="vi" \
+				&& __editor="nano"
+		else
+			__editor="${EDITOR}"
+		fi
+	else
+		__editor="${VISUAL}"
+	fi
+
+	trap "rm ${__temp_file} >/dev/null 2>&1 && echo 'Removed tempfile' || echo 'Unable to remove tempfile'" EXIT SIGTERM
+
+	"${__editor}" "${__temp_file}" \
+		|| die "Unable to write to <${__temp_file}>"
+	
+	echo "Stopping avorion@${__instance}.service..."
+	sudo systemctl stop avorion@"${__instance}" >/dev/null
+
+	mv "$__temp_file" "$__inst_file" \
+		|| say "Unable to make changes to instance settings"
+
+	echo "Starting avorion@${__instance}.service..."
+	sudo systemctl start avorion@"${__instance}" \
+		|| die "Unable to start!!"
+}
+
 function __show_service_instances () {
 	if (( ! "$(find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' | wc -l)" > 0 )); then
 		echo "No service instances running"
