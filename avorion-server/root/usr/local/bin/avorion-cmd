@@ -15,6 +15,33 @@ function die () {
 	exit 1
 }
 
+# bool yesno <string>
+#	Get a yes or no response from the user and
+#	return accordingly (0 for yes, 1 for no).
+#	If a string is passed, provide the user with
+#	that string as a prompt.
+function yesno () {
+	local _prompt _answer
+	_prompt="${1-[Yes/No]> }"
+
+	while true; do
+		printf '%s' "${_prompt}"
+		read _answer
+
+		case "${_answer}" in
+			[yY][eE][sS] | [yY])
+				return 0
+				;;
+			[nN][oO] | [nN])
+				return 1
+				;;
+			?)
+				say "Please enter yes or no."
+				;;
+		esac
+	done
+}
+
 # int __validate_process_exec <ARGV>
 #	Run various pre-checks prior to running the main
 #	script body to ensure that the process execution
@@ -131,6 +158,9 @@ function __set_tmux_instance () {
 	fi
 }
 
+# void __set_globals <void>
+#	Set various global values, and declare
+#	other unset globals
 function __set_globals () {
 	readonly _clr="$(tput sgr0)"
 	readonly _bld="$(tput bold)"
@@ -144,18 +174,28 @@ function __set_globals () {
 	declare _tmuxsess _tmuxsock _instdir
 }
 
+# void __perform_update <void>
+#	Perform a server update for the Avorion server
+#	software. Stops all current server instances,
+#	updates the server, and restarts the stopped
+#	instances.
 function __perform_update () {
 
+	# Die if there is already an update running.
 	[[ -d "/tmp/avorion/updatingavorion.lock" ]] \
 		&& die "Update process already running"
 
 	mkdir -p /tmp/updatingavorion.lock >/dev/null 2>&1 \
-		|| echo "Unable to create avorion lockfile! Check /tmp usage."
+		|| die "Unable to create avorion lockfile! Check /tmp usage."
 
+	trap 'rm -rf /tmp/avorion/updatingavorion.lock;echo "Updates unlocked"' EXIT
 	local _units _inst
 
+	# Queries the systemd bus for active avorion@ instances,
+	# and saves them.
 	_units="$(systemctl list-units 'avorion@*' | grep -E '^avorion@[^\s]+.service loaded active running' | awk '{print $1}')"
 	
+	# If there were any active instances, stop them.
 	[[ -n "${_units}" ]] && {
 		while read _inst; do
 			_inst="${_inst%%.service}"
@@ -166,15 +206,22 @@ function __perform_update () {
 
 	echo "Updates locked."
 
+	# Send the update command (with validation) to the steamcmd instance. We also
+	# have tmux pipe the output of the command to the file $AVORION_SERVICEDIR/steamupdate.log
 	"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/steamcmd.sock" \
 		send-keys "force_install_dir \"${AVORION_SERVICEDIR}/${AVORION_BINDIR}\"" ENTER "app_update \"$AVORION_STEAMID\" validate" ENTER \; \
 		pipe-pane "exec cat > ${AVORION_SERVICEDIR}/steamupdate.log" \;
 
+	# As a workaround, since we have the command above operating concurrently,
+	# we following the new logoutput until it reaches a stage in which we know
+	# that the Steam updater has completed. Then, we exit using the `q` sed command.
 	tail -n 100 -f "${AVORION_SERVICEDIR}/steamupdate.log" 2>&1 | sed -r '/^(Success!|Failure)/ q'
 	echo 'Done'
 	
+	# Stop outputing to a logfile
 	"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/steamcmd.sock" pipe-pane \;
 
+	# If any instances were up prior to the update, re-start them
 	[[ -n "${_units}" ]] && {
 		while read _inst; do
 			__inst="${_inst%%.service}"
@@ -182,13 +229,6 @@ function __perform_update () {
 			sudo -n systemctl start "${_inst}"
 		done <<< "${_units}"
 	}
-
-	rm -rf /tmp/avorion/updatingavorion.lock >/dev/null 2>&1 || {
-		echo "Unable to remove lockfile. Please ensure that the update was finished successfully."
-		exit 1
-	}
-	
-	echo "Updates unlocked"
 
 	exit 0
 }
@@ -201,8 +241,14 @@ function __perform_sector_reset () {
 	true
 }
 
+# bool __perform_config_edits <string> <string>
+#	Given a file and an instance, create a temporary
+#	file in which to operate on and install it in the
+#	correct instance directory. Note that this stops
+#	the instance before installing the edits, as Avorion
+#	will overwrite the edits made on restart.
 function __perform_config_edits () {
-	__assert_valid_file "$2" \
+	__assert_valid_user_input "$2" \
 		|| die "Invalid file passed: <$2>" \
 	
 	local __instance="$1"
