@@ -131,6 +131,19 @@ function __set_tmux_instance () {
 	fi
 }
 
+function __set_globals () {
+	readonly _clr="$(tput sgr0)"
+	readonly _bld="$(tput bold)"
+	readonly _red="$(tput setaf 1)"
+	readonly _grn="$(tput setaf 2)"
+	readonly _yel="$(tput setaf 3)"
+	readonly _wht="$(tput setaf 7)"
+	readonly _tmuxconf=/etc/avorioncmd-tmux.conf
+	readonly _tmuxcmd="$(which tmux)"
+
+	declare _tmuxsess _tmuxsock _instdir
+}
+
 function __perform_update () {
 
 	[[ -d "/tmp/avorion/updatingavorion.lock" ]] \
@@ -277,19 +290,6 @@ function __show_service_instances () {
 	done
 }
 
-function __set_globals () {
-	readonly _clr="$(tput sgr0)"
-	readonly _bld="$(tput bold)"
-	readonly _red="$(tput setaf 1)"
-	readonly _grn="$(tput setaf 2)"
-	readonly _yel="$(tput setaf 3)"
-	readonly _wht="$(tput setaf 7)"
-	readonly _tmuxconf=/etc/avorioncmd-tmux.conf
-	readonly _tmuxcmd="$(which tmux)"
-
-	declare _tmuxsess _tmuxsock _instdir
-}
-
 function main () {
 	__validate_setting_conf && source /etc/avorionsettings.conf
 	__assert_valid_execution
@@ -394,7 +394,7 @@ function main () {
 				    Edit the specified configuration file for the Avorion instance given.
 				    ${_grn}${CMDNAME} config <instance> <file>${_clr}
 					
-					Avorion Config Files:
+				    Avorion Config Files:
 				        server.ini
 				        modconfig.lua
 			            whitelist.txt
