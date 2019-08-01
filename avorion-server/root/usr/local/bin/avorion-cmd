@@ -404,65 +404,65 @@ function main () {
 			;;
 
 		help)
-			cat <<- _EOF_
-			Usage: ${CMDNAME} <command> <optons> <parameters>
-			
-			Commands:
-			    showinstances
-				    Display a listing of all Avorion/Steam instances
-			    
-				help
-				    This help text
-			    
-				usage
-				    Print the usage text
+			cat << _EOF_
+Usage: ${CMDNAME} <command> <optons> <parameters>
 
-			    start
-				    Start the given Avorion instance
-			        ${_grn}${CMDNAME} start <instance>${_clr}
-
-			    restart
-				    Restart the given instance
-			        ${_grn}${CMDNAME} restart <instance>${_clr}
-				
-				stop
-				    Stop the given instance. Unlike when used in game, this will prevent
-				    the game from restarting following the 30 second window. Use this when
-				    configuration changes need to be made.
-				    ${_grn}${CMDNAME} stop <instance>${_clr}
-			    
-				exec
-			        Pass the given commands into the instance server session.
-					${_grn}${CMDNAME} exec <instance> <commands>${_clr}
-				    ${_red}WARNING:${_clr} Unfinished/Untested and may be buggy, please dont use this for large Lua scripts commands until further tested.	
-
-				config
-				    Edit the specified configuration file for the Avorion instance given.
-				    ${_grn}${CMDNAME} config <instance> <file>${_clr}
-					
-				    Avorion Config Files:
-				        server.ini
-				        modconfig.lua
-			            whitelist.txt
-				        blacklist.txt
-				        admin.xml
-				        ipblacklist.txt
-				        group-whitelist.txt
-
-				resetsectors
-				    Reset the given sectors.
-					${_grn}${CMDNAME} resetsectors <instance> <x:y, ...>${_clr}
-			        ${_yel}NOTICE: Not currently implemented${_clr}
-				
-				backup
-				    Take a backup of the given instance.
-				    ${_grn}${CMDNAME} backup <instance>${_clr}
-			        ${_yel}NOTICE: Not currently implemented${_clr}
-				
-				update
-				    Force a game update. Not usually necessary as simply restarting the server
-					should accomplish this.
-			_EOF_
+Commands:
+	showinstances
+		Display a listing of all Avorion/Steam instances
+	
+	help
+		This help text
+	
+	usage
+		Print the usage text
+	
+	start
+		Start the given Avorion instance
+		${_grn}${CMDNAME} start <instance>${_clr}
+	
+	restart
+		Restart the given instance
+		${_grn}${CMDNAME} restart <instance>${_clr}
+	
+	stop
+		Stop the given instance. Unlike when used in game, this will prevent
+		the game from restarting following the 30 second window. Use this when
+		configuration changes need to be made.
+		${_grn}${CMDNAME} stop <instance>${_clr}
+	
+	exec
+		Pass the given commands into the instance server session.
+		${_grn}${CMDNAME} exec <instance> <commands>${_clr}
+		${_red}WARNING:${_clr} Unfinished/Untested and may be buggy, please dont use this for large Lua scripts commands until further tested.	
+	
+	config
+		Edit the specified configuration file for the Avorion instance given.
+		${_grn}${CMDNAME} config <instance> <file>${_clr}
+		
+		Avorion Config Files:
+			server.ini
+			modconfig.lua
+			whitelist.txt
+			blacklist.txt
+			admin.xml
+			ipblacklist.txt
+			group-whitelist.txt
+	
+	resetsectors
+		Reset the given sectors.
+		${_grn}${CMDNAME} resetsectors <instance> <x:y, ...>${_clr}
+		${_yel}NOTICE: Not currently implemented${_clr}
+	
+	backup
+		Take a backup of the given instance.
+		${_grn}${CMDNAME} backup <instance>${_clr}
+		${_yel}NOTICE: Not currently implemented${_clr}
+	
+	update
+		Force a game update. Not usually necessary as simply restarting the server
+		should accomplish this.
+_EOF_
 			exit 0
 			;;
 
