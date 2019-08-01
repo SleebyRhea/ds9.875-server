@@ -1,5 +1,7 @@
 #! /usr/bin/env bash
 
+CMDVERS='0.5.1'
+
 # void say <string, ...>
 #	Ouput the strings passed to stdout and return
 function say () {
@@ -140,10 +142,15 @@ function __validate_setting_conf () {
 	return 0
 }
 
+# bool __set_tmux_instance <string>
+#	Provided a string, verify that the instance
+#	is a valid (and active) tmux controlled instance
+#	and set the tmux socket and session globals
 function __set_tmux_instance () {
 	[[ -z "$1" ]] \
 		|| return 1
 
+	# Strip bad chars from user input
 	_tmuxsess="$1"
 	_tmuxsess="${_tmuxsess//[ _]/\-}"
 	_tmuxsess="${_tmuxsess//[^a-zA-Z0-9\-]/}"
@@ -188,7 +195,9 @@ function __perform_update () {
 	mkdir -p /tmp/updatingavorion.lock >/dev/null 2>&1 \
 		|| die "Unable to create avorion lockfile! Check /tmp usage."
 
-	trap 'rm -rf /tmp/avorion/updatingavorion.lock;echo "Updates unlocked"' EXIT
+	# Make sure that the update lock is removed following this
+	# scripts end
+	trap 'rm -rf /tmp/avorion/updatingavorion.lock;echo "Updates unlocked"' EXIT INT TERM
 	local _units _inst
 
 	# Queries the systemd bus for active avorion@ instances,
@@ -241,7 +250,7 @@ function __perform_sector_reset () {
 	true
 }
 
-# bool __perform_config_edits <string> <string>
+# bool __perform_config_edits <string, string>
 #	Given a file and an instance, create a temporary
 #	file in which to operate on and install it in the
 #	correct instance directory. Note that this stops
@@ -305,6 +314,10 @@ function __perform_config_edits () {
 		|| die "Unable to start!!"
 }
 
+# void __show_service_instances <void>
+#	Locate and verify current online and offline
+#	instances. Then, print them (formatted) to the screen
+#	and exit
 function __show_service_instances () {
 	if (( ! "$(find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' | wc -l)" > 0 )); then
 		echo "No service instances running"
@@ -344,7 +357,7 @@ function main () {
 	local __err_bad_inst='Invalid instance passed:'
 
 	case "$1" in
-		attach)
+		-a|a|attach)
 			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
@@ -353,7 +366,7 @@ function main () {
 				&& exit 0
 			;;
 		
-		view)
+		-v|v|view)
 			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
@@ -362,7 +375,7 @@ function main () {
 				&& exit 0
 			;;
 		
-		exec)
+		-e|e|exec)
 			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
@@ -372,19 +385,19 @@ function main () {
 				&& exit 0
 			;;
 		
-		update)
+		-U|update)
 			__perform_update \
 				|| exit 1 \
 				&& exit 0
 			;;
 		
-		showinstances)
+		--show-instances|showinstances|instances)
 			__show_service_instances \
 				|| exit 1 \
 				&& exit 0
 			;;
 
-		backup)
+		--backup|backup)
 			__get_instance_dir \
 				|| die "${__err_bad_inst} <$2>"
 
@@ -393,7 +406,7 @@ function main () {
 				&& exit 0
 			;;
 
-		resetsector)
+		--reset-sector|resetsector)
 			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
@@ -403,8 +416,9 @@ function main () {
 				&& exit 0
 			;;
 
-		help)
+		--help|help|-h)
 			cat << _EOF_
+Avorion Manager v${CMDVERS}
 Usage: ${CMDNAME} <command> <optons> <parameters>
 
 Commands:
@@ -463,6 +477,10 @@ Commands:
 		Force a game update. Not usually necessary as simply restarting the server
 		should accomplish this.
 _EOF_
+			exit 0
+			;;
+		-V|--version)
+			echo "${CMDVERS}"
 			exit 0
 			;;
 
