@@ -118,7 +118,7 @@ function __validate_setting_conf () {
 			&& die "${__err} -- Invalid chars present: <${__l}>"
 		
 		# Ensure that the variable declaration syntax is valid
-		[[ "$__l" =~ ^([\s]+)=([\s]+)$ ]] \
+		[[ "$__l" =~ ^([^ \t\n]+)=([^ \t]+)$ ]] \
 			|| die "${__err} -- Bad syntax: <${__l}>"
 
 		# Ensure that the variable being declared is actually
