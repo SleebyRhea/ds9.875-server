@@ -1,6 +1,7 @@
 #! /usr/bin/env bash
 
 CMDVERS='0.5.1'
+CMDNAME="$(basename "$0")"
 
 # void say <string, ...>
 #	Ouput the strings passed to stdout and return
