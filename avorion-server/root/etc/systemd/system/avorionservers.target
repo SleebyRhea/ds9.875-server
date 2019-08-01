@@ -1,0 +1,6 @@
+[Unit]
+Description=Avorion Server Targets
+Wants=avorion@ds9server.service
+
+[Install]
+WantedBy=multi-user.target
