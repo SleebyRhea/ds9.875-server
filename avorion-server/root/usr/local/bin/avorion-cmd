@@ -6,11 +6,13 @@ CMDNAME="$(basename "$0")"
 # void say <string, ...>
 #	Ouput the strings passed to stdout and return
 function say () {
-	echo "$1"
+	for _l in "$@"; do
+		printf '%s\n' "${_l}"
+	done
 	return 0
 }
 
-# int die <options> <string, ...>
+# int die <options> <string>
 #	Output the strings passed to stdout then exit
 #	with status code 1 (or the code given w
 function die () {
@@ -67,7 +69,10 @@ function __assert_valid_execution () {
 		die "This command should not be run from within a Screen/Tmux session"
 	fi
 
-	# Make sure the user is part of the admin group or is root
+	# Make sure the user is part of the admin group or is root. The 
+	# regex is used here to prevent unintentionally matching groups
+	# that contain the group string but dont exactly match it. Since
+	# root should be able to do anything, we also check for id 0
 	if [[ ! "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP$) ]] && [[ "$(id -u)" != 0 ]]; then
 		die "This command can only be run by a DS9 admin or root."
 	fi
@@ -109,19 +114,20 @@ function __validate_setting_conf () {
 	while read -r __l; do
 		local __err="Configuration error on line ${i} of /etc/avorionsettings.conf"
 		
-		# Set line count
+		# Set current line count
 		((i++))
 		
 		# We dont care about blank lines, so skip those
-		[[ "$__l" =~ ^\s*$ ]] \
-			&& continue
+		[[ "${__l}" =~ ^\s*$ ]] && continue
 
 		# Ensure the line contains no invalid symbols
-		[[ "$__l" =~ $__bad_symbols ]] \
+		[[ "${__l}" =~ $__bad_symbols ]] \
 			&& die "${__err} -- Invalid chars present: <${__l}>"
 		
-		# Ensure that the variable declaration syntax is valid
-		[[ "$__l" =~ ^([^ \t\n]+)=([^ \t]+)$ ]] \
+		# Ensure that the variable declaration syntax is valid.
+		# We also use this to assign the captured strings to the
+		# BASH_REMATCH environment variable.
+		[[ "${__l}" =~ ^([^ \t]+)=([^ \t]+)$ ]] \
 			|| die "${__err} -- Bad syntax: <${__l}>"
 
 		# Ensure that the variable being declared is actually
@@ -136,7 +142,7 @@ function __validate_setting_conf () {
 		#       want to catch things like having the admin grp
 		#       set to sudo.
 		[[ "${BASH_REMATCH[2]}" =~ ${__conf_vars[${BASH_REMATCH[1]}]} ]] \
-			|| die "${__err} -- Invalid assignment: <$__l>"
+			|| die "${__err} -- Invalid assignment: <${__l}>"
 
 	done < /etc/avorionsettings.conf
 	
@@ -156,9 +162,13 @@ function __set_tmux_instance () {
 	_tmuxsess="${_tmuxsess//[ _]/\-}"
 	_tmuxsess="${_tmuxsess//[^a-zA-Z0-9\-]/}"
 
+	# Catch references to steam and force set the instance to steamcmd
 	if [[ "$_tmuxsess" =~ ^[sS][tT][eE][aA][mM] ]]; then
 		_tmuxsock="${AVORION_SERVICEDIR}/sockets/steamcmd.sock"
-	elif systemctl status avorion@"$_tmuxsess" >/dev/null 2>&1 || systemctl status "${_tmuxsess}.service" >/dev/null 2>&1; then
+
+	# If the instance is either an Avorion instance or a valid service
+	# file, then use that and set the tmux session
+	elif systemctl status avorion@"$_tmuxsess" >/dev/null 2>&1 || systemctl status "${_tmuxsess}" >/dev/null 2>&1; then
 		_tmuxsock="${AVORION_SERVICEDIR}/sockets/${_tmuxsess}.sock"
 	else
 		echo "$_tmuxsess is not a valid instance"
@@ -186,7 +196,9 @@ function __set_globals () {
 #	Perform a server update for the Avorion server
 #	software. Stops all current server instances,
 #	updates the server, and restarts the stopped
-#	instances.
+#	instances if any were present. Can also be used
+#	to install avorion if the server was not already
+#	present on the system.
 function __perform_update () {
 
 	# Die if there is already an update running.
@@ -201,8 +213,7 @@ function __perform_update () {
 	trap 'rm -rf /tmp/avorion/updatingavorion.lock;echo "Updates unlocked"' EXIT INT TERM
 	local _units _inst
 
-	# Queries the systemd bus for active avorion@ instances,
-	# and saves them.
+	# Queries the systemd bus for active avorion@ instances and saves them
 	_units="$(systemctl list-units 'avorion@*' | grep -E '^avorion@[^\s]+.service loaded active running' | awk '{print $1}')"
 	
 	# If there were any active instances, stop them.
@@ -223,7 +234,7 @@ function __perform_update () {
 		pipe-pane "exec cat > ${AVORION_SERVICEDIR}/steamupdate.log" \;
 
 	# As a workaround, since we have the command above operating concurrently,
-	# we following the new logoutput until it reaches a stage in which we know
+	# we follow the new log output until it reaches a stage in which we know
 	# that the Steam updater has completed. Then, we exit using the `q` sed command.
 	tail -n 100 -f "${AVORION_SERVICEDIR}/steamupdate.log" 2>&1 | sed -r '/^(Success!|Failure)/ q'
 	echo 'Done'
@@ -330,7 +341,7 @@ function __show_service_instances () {
 	find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' -printf '%f\n' | sort | while read -r _sock; do
 		local _instance="${_sock%%.sock*}"
 	
-		if systemctl list-units avorion@* 2>&1 | grep -q "^avorion@${_instance}.service " >/dev/null 2>&1 ; then
+		if systemctl list-units 'avorion@*' 2>&1 | grep -q "^avorion@${_instance}.service " >/dev/null 2>&1 ; then
 			systemctl status avorion@"${_instance}" >/dev/null 2>&1 \
 				&& echo "${_instance} (avorion@${_instance}) -- ${_grn}Online${_clr}" \
 				|| echo "${_instance} (avorion@${_instance}) -- ${_red}Offline${_clr}"
@@ -502,6 +513,7 @@ Commands:
 _EOF_
 			exit 0
 			;;
+
 		-V|--version)
 			echo "${CMDVERS}"
 			exit 0
