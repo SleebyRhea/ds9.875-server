@@ -92,10 +92,10 @@ function __validate_setting_conf () {
 	local -A __conf_vars
 	local __bad_symbols
 	__bad_symbols="[\\&^s\(\)%\[\]\#@!<>\'\",;:\{\}]"
-	__conf_vars[AVORION_ADMIN_GRP]='[a-z]{4,}'
-	__conf_vars[AVORION_SERVICEDIR]='[a-zA-Z0-9_\-]{1,}'
-	__conf_vars[AVORION_BINDIR]='[a-zA-Z0-9_\-]{1,}'
-	__conf_vars[AVORION_STEAMID]='[0-9]{2,}'
+	__conf_vars[AVORION_ADMIN_GRP]='^[a-z]+$'
+	__conf_vars[AVORION_SERVICEDIR]='^/[a-zA-Z0-9_\-]+$'
+	__conf_vars[AVORION_BINDIR]='^/[a-zA-Z0-9_\-]+$'
+	__conf_vars[AVORION_STEAMID]='^[0-9]+$'
 
 	# Leaving this here for now, but this used to check for invalid options
 	# being set in the configuration file
@@ -343,7 +343,7 @@ function main () {
 
 	local __err_bad_inst='Invalid instance passed:'
 
-	case "$1" in 
+	case "$1" in
 		attach)
 			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
