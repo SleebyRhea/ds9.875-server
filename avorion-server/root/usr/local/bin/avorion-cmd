@@ -514,7 +514,7 @@ function main () {
 	done
 
 	case "$1" in
-		-a|a|attach)
+		attach)
 			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
@@ -523,7 +523,7 @@ function main () {
 				&& exit 0
 			;;
 		
-		-v|v|view)
+		view)
 			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
@@ -532,7 +532,7 @@ function main () {
 				&& exit 0
 			;;
 		
-		-e|e|exec)
+		exec)
 			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
@@ -542,19 +542,19 @@ function main () {
 				&& exit 0
 			;;
 		
-		-U|update)
+		update)
 			__perform_update \
 				|| exit 1 \
 				&& exit 0
 			;;
 		
-		--show-instances|showinstances|instances)
+		showinstances|-I)
 			__show_service_instances \
 				|| exit 1 \
 				&& exit 0
 			;;
 
-		--backup|backup)
+		backup)
 			__get_instance_dir \
 				|| die "${__err_bad_inst} <$2>"
 
@@ -563,7 +563,7 @@ function main () {
 				&& exit 0
 			;;
 
-		config|-C|--config)
+		config)
 			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
@@ -575,7 +575,7 @@ function main () {
 				&& exit 0
 			;;
 
-		--reset-sector|resetsector)
+		resetsector)
 			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
@@ -593,6 +593,12 @@ function main () {
 				&& exit 0
 			;;
 
+		usage|--usage|-u)
+			say "Avorion Manager v${CMDVERS}"
+			say "Usage: ${CMDNAME} <command> <optons> <parameters>"
+			exit 0
+			;;
+
 		--help|help|-h)
 			cat << _EOF_
 Avorion Manager v${CMDVERS}
@@ -607,6 +613,9 @@ Commands:
 	
 	usage --usage -u
 		Print the usage text
+	
+	version --version -V
+		Print versioning information
 	
 	start
 		Start the given Avorion instance
