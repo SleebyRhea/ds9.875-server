@@ -13,6 +13,10 @@ function say () {
 	return 0
 }
 
+# bool dbssay <string, ...>
+#	If the script is currently in debug mode, `say`
+#	the arguments passed to this function. Otherwise,
+#	return code 1
 function dbgsay () {
 	[[ "${VERBOSE}" == 1 ]] \
 		&& say "$@" \
@@ -21,10 +25,16 @@ function dbgsay () {
 
 # int die <options> <string>
 #	Output the strings passed to stdout then exit
-#	with status code 1 (or the code given w
+#	with status code 1 (or the code given with -c)
 function die () {
+	local _code=1
+	if [[ "$1" -eq '-c' ]] && [[ "$2" =~ ^[0-9]+$ ]]; then
+		_code="$2"
+		shift; shift
+	fi
+
 	say "Error: $1"
-	exit 1
+	exit "$_code"
 }
 
 # bool yesno <string>
