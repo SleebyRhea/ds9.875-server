@@ -568,7 +568,7 @@ function main () {
 				|| die "${__err_bad_inst} <$2>"
 
 			[[ "$_tmuxsess" =~ ^[sS][tT][eE][aA][mM] ]] \
-				|| die "Steam configs are not managed by avorion-cmd"
+				|| die "Steam configs are not managed by ${CMDNAME}"
 
 			__perform_config_edits "$_tmuxsess" "$3" \
 				|| exit 1 \
