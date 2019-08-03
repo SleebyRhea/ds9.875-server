@@ -173,7 +173,7 @@ function __validate_setting_conf () {
 		__err="Configuration error on line ${i} of /etc/avorionsettings.conf"
 		
 		# We dont care about blank lines, so skip those
-		[[ "${__l}" =~ ^\s*$ ]] && continue
+		[[ "${__l}" =~ ^[ \t]*$ ]] && continue
 
 		# Ensure the line contains no invalid symbols
 		[[ "${__l}" =~ $__bad_symbols ]] \
