@@ -2,7 +2,7 @@
 
 CMDVERS='0.5.1'
 CMDNAME="$(basename "$0")"
-EDATE="$(date %s)"
+EDATE="$(date +%s)"
 
 # void say <string, ...>
 #	Ouput the strings passed to stdout and return
@@ -28,7 +28,7 @@ function dbgsay () {
 #	with status code 1 (or the code given with -c)
 function die () {
 	local _code=1
-	if [[ "$1" -eq '-c' ]] && [[ "$2" =~ ^[0-9]+$ ]]; then
+	if [[ "$1" -eq '-c' ]] && [[ "$2" =~ ^[0-9][0-9]*$ ]]; then
 		_code="$2"
 		shift; shift
 	fi
@@ -173,7 +173,7 @@ function __validate_setting_conf () {
 		__err="Configuration error on line ${i} of /etc/avorionsettings.conf"
 		
 		# We dont care about blank lines, so skip those
-		[[ "${__l}" =~ ^[ \t]*$ ]] && continue
+		[[ "${__l}" =~ ^[:space:]*$ ]] && continue
 
 		# Ensure the line contains no invalid symbols
 		[[ "${__l}" =~ $__bad_symbols ]] \
@@ -239,12 +239,12 @@ function __set_globals () {
 	declare VERBOSE=0
 	declare _tmuxsess _tmuxsock _instdir
 	
-	readonly _clr="$(tput sgr0)"
-	readonly _bld="$(tput bold)"
-	readonly _red="$(tput setaf 1)"
-	readonly _grn="$(tput setaf 2)"
-	readonly _yel="$(tput setaf 3)"
-	readonly _wht="$(tput setaf 7)"
+	readonly _clr="$(tput sgr0 2>/dev/null)"		# prevent error spam when there is no $TERM
+	readonly _bld="$(tput bold 2>/dev/null)"		# such as when run from systemd unit
+	readonly _red="$(tput setaf 1 2>/dev/null)"
+	readonly _grn="$(tput setaf 2 2>/dev/null)"
+	readonly _yel="$(tput setaf 3 2>/dev/null)"
+	readonly _wht="$(tput setaf 7 2>/dev/null)"
 	readonly _tmuxconf=/etc/avorioncmd-tmux.conf
 	readonly _tmuxcmd="$(which tmux)"
 	readonly _regex_sector_arg='^-?[0-9]{1,3}:-?[0-9]{1,3}(--?[0-9]{1,3}:-?[0-9]{1,3}|)$'
@@ -367,7 +367,7 @@ function __perform_sector_reset () {
 		# a `_`, here we make use of Bash's ability to store regex capture
 		# an array (BASH_REMATCH) to generate two for loops to queue the
 		# passed sectors.
-		elif [[ "$1" =~ ^(-?[0-9]{1,3}):(-?[0-9]{1,3})-(-?[0-9]{1,3}):(-?[0-9]{1,3})$ ]]; then
+		elif [[ "$1" =~ ^(-{0,1}[0-9]{1,3}):(-{0,1}[0-9]{1,3})-(-{0,1}[0-9]{1,3}):(-{0,1}[0-9]{1,3})$ ]]; then
 			_x1="${BASH_REMATCH[1]}"; _x2="${BASH_REMATCH[2]}"
 			_y1="${BASH_REMATCH[3]}"; _y2="${BASH_REMATCH[4]}"
 			for _x in {"$_x1".."$_x2"}; do
@@ -487,7 +487,7 @@ function __show_service_instances () {
 		exit 1
 	fi
 
-	echo "${_bld}${_wht}DeepSpace 9.875 Service Instances:${_clr}"
+	echo "${_bld}${_wht}DeepSpace 9.875 Service Instances for $HOSTNAME${_clr}"
 
 	find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' -printf '%f\n' | sort | while read -r _sock; do
 		local _instance="${_sock%%.sock*}"
