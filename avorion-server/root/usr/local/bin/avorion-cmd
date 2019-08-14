@@ -182,7 +182,7 @@ function __validate_setting_conf () {
 		# Ensure that the variable declaration syntax is valid.
 		# We also use this to assign the captured strings to the
 		# BASH_REMATCH environment variable.
-		[[ "${__l}" =~ ^([^ \t]+)=([^ \t]+)$ ]] \
+		[[ "${__l}" =~ ^([^[:space:]]+)=([^[:space:][:space:]*)$ ]] \
 			|| die "${__err} -- Bad syntax: <${__l}>"
 
 		# Ensure that the variable being declared is actually
