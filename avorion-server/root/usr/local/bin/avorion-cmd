@@ -156,10 +156,10 @@ function __validate_setting_conf () {
 	local -A __conf_vars
 	local __bad_symbols __err
 	__bad_symbols="[\\&^s\(\)%\[\]\#@!<>\'\",;:\{\}]"
-	__conf_vars[AVORION_ADMIN_GRP]='^[a-z]+$'
-	__conf_vars[AVORION_SERVICEDIR]='^/[a-zA-Z0-9_\-]+$'
-	__conf_vars[AVORION_BINDIR]='^/[a-zA-Z0-9_\-]+$'
-	__conf_vars[AVORION_STEAMID]='^[0-9]+$'
+	__conf_vars[AVORION_ADMIN_GRP]='^[a-z][a-z]*$'
+	__conf_vars[AVORION_SERVICEDIR]='^/[a-zA-Z0-9_\-][a-zA-Z0-9_\-]*$'
+	__conf_vars[AVORION_BINDIR]='^/[a-zA-Z0-9_\-][a-zA-Z0-9_\-]*$'
+	__conf_vars[AVORION_STEAMID]='^[0-9][0-9]*$'
 
 	# Leaving this here for now, but this used to check for invalid options
 	# being set in the configuration file
@@ -248,8 +248,8 @@ function __set_globals () {
 	readonly _wht="$(tput setaf 7 2>/dev/null)"
 	readonly _tmuxconf=/etc/avorioncmd-tmux.conf
 	readonly _tmuxcmd="$(which tmux)"
-	readonly _regex_sector_arg='^-?[0-9]{1,3}:-?[0-9]{1,3}(--?[0-9]{1,3}:-?[0-9]{1,3}|)$'
-	readonly _regex_sector_num='-?[0-9]{1,3}'
+	readonly _regex_sector_arg='^-{0,1}[0-9]{1,3}:-{0,1}[0-9]{1,3}(--{0,1}[0-9]{1,3}:-{0,1}[0-9]{1,3}|)$'
+	readonly _regex_sector_num='-{0,1}[0-9]{1,3}'
 }
 
 # void __perform_update <void>
