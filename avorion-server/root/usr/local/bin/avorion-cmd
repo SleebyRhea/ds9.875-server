@@ -78,6 +78,7 @@ function plural () {
 
 	die "Function \`plural\` recieved <$1> rather than an int"
 }
+
 # bool __check_requirements <void>
 #	Checks required software versions and exits if either
 #	the required software is not present in $PATH or if it
@@ -88,9 +89,9 @@ function __check_requirements () {
 
 	# Required version strings, prepended with the argument
 	# that will invoke them.
-	_requires[tmux]='-V=^[0-9]?[2-9].[0-9].*'
-	_requires[bash]='--verson=^GNU bash, version [0-9]?[4-9].*'
-	_requires[sed]='--version=^sed (GNU sed) [0-9]?[4-9].*'
+	_requires[tmux]='-V=^[0-9]{0,1}[2-9]\.[0-9].*'
+	_requires[bash]='--verson=^GNU bash, version [0-9]{0,1}[4-9].*'
+	_requires[sed]='--version=^sed (GNU sed) [0-9]{0,1}[4-9].*'
 	_requires[steamcmd]='=.*'
 
 	for _prog in "${!_requires[@]}"; do
@@ -156,10 +157,10 @@ function __validate_setting_conf () {
 	local -A __conf_vars
 	local __bad_symbols __err
 	__bad_symbols="[\\&^s\(\)%\[\]\#@!<>\'\",;:\{\}]"
-	__conf_vars[AVORION_ADMIN_GRP]='^[a-z]+$'
-	__conf_vars[AVORION_SERVICEDIR]='^/[a-zA-Z0-9_\-]+$'
-	__conf_vars[AVORION_BINDIR]='^/[a-zA-Z0-9_\-]+$'
-	__conf_vars[AVORION_STEAMID]='^[0-9]+$'
+	__conf_vars[AVORION_ADMIN_GRP]='^[a-z][a-z]*$'
+	__conf_vars[AVORION_SERVICEDIR]='^/[a-zA-Z0-9_\-][a-zA-Z0-9_\-]*$'
+	__conf_vars[AVORION_BINDIR]='^/[a-zA-Z0-9_\-][a-zA-Z0-9_\-]*$'
+	__conf_vars[AVORION_STEAMID]='^[0-9][0-9]*$'
 
 	# Leaving this here for now, but this used to check for invalid options
 	# being set in the configuration file
@@ -240,12 +241,12 @@ function __set_globals () {
 	declare VERBOSE=0
 	declare _tmuxsess _tmuxsock _instdir
 	
-	readonly _clr="$(tput sgr0)"
-	readonly _bld="$(tput bold)"
-	readonly _red="$(tput setaf 1)"
-	readonly _grn="$(tput setaf 2)"
-	readonly _yel="$(tput setaf 3)"
-	readonly _wht="$(tput setaf 7)"
+	readonly _clr="$(tput sgr0 2>/dev/null)"		# prevent error spam when there is no $TERM
+	readonly _bld="$(tput bold 2>/dev/null)"		# such as when run from systemd unit
+	readonly _red="$(tput setaf 1 2>/dev/null)"
+	readonly _grn="$(tput setaf 2 2>/dev/null)"
+	readonly _yel="$(tput setaf 3 2>/dev/null)"
+	readonly _wht="$(tput setaf 7 2>/dev/null)"
 	readonly _tmuxconf=/etc/avorioncmd-tmux.conf
 	readonly _tmuxcmd="$(which tmux)"
 	readonly _steamcmd="$(which steamcmd)"
@@ -523,7 +524,7 @@ function __show_service_instances () {
 		exit 1
 	fi
 
-	echo "${_bld}${_wht}DeepSpace 9.875 Service Instances:${_clr}"
+	echo "${_bld}${_wht}DeepSpace 9.875 Service Instances for $HOSTNAME${_clr}"
 
 	find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' -printf '%f\n' | sort | while read -r _sock; do
 		local _instance="${_sock%%.sock*}"
