@@ -28,7 +28,7 @@ function dbgsay () {
 #	with status code 1 (or the code given with -c)
 function die () {
 	local _code=1
-	if [[ "$1" -eq '-c' ]] && [[ "$2" =~ ^[0-9][0-9]*$ ]]; then
+	if [[ "$1" == '-c' ]] && [[ "$2" =~ ^[0-9][0-9]*$ ]]; then
 		_code="$2"
 		shift; shift
 	fi
@@ -556,7 +556,7 @@ function main () {
 
 	local __err_bad_inst='Invalid instance passed:'
 
-	for _arg do
+	for _arg; do
 		shift
 		if [[ "${_arg}" == --debug ]]; then
 			VERBOSE=1
