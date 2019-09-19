@@ -99,7 +99,7 @@ function __check_requirements () {
 		_string="${_requires["$_prog"]##*=}"
 
 		command -v "$_prog" >/dev/null 2>&1 ||\
-			die "${_prog} is required but is eithernot installed, or not in \$PATH"
+			die "${_prog} is required but is either not installed, or not in the execution PATH"
 
 		[[ "$("$_prog" "$_arg")" =~ $_string ]] ||\
 			die "${_prog} doesnt meet the minimum version requirements"
@@ -158,8 +158,8 @@ function __validate_setting_conf () {
 	local __bad_symbols __err
 	__bad_symbols="[\\&^s\(\)%\[\]\#@!<>\'\",;:\{\}]"
 	__conf_vars[AVORION_ADMIN_GRP]='^[a-z][a-z]*$'
-	__conf_vars[AVORION_SERVICEDIR]='^/[a-zA-Z0-9_\-][a-zA-Z0-9_\-]*$'
-	__conf_vars[AVORION_BINDIR]='^/[a-zA-Z0-9_\-][a-zA-Z0-9_\-]*$'
+	__conf_vars[AVORION_SERVICEDIR]='^/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
+	__conf_vars[AVORION_BINDIR]='^[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
 	__conf_vars[AVORION_STEAMID]='^[0-9][0-9]*$'
 
 	# Leaving this here for now, but this used to check for invalid options
