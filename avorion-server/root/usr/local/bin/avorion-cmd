@@ -90,9 +90,9 @@ function __check_requirements () {
 	# Required version strings, prepended with the argument
 	# that will invoke them.
 	_requires[tmux]='-V=^[0-9]{0,1}[2-9]\.[0-9].*'
-	_requires[bash]='--verson=^GNU bash, version [0-9]{0,1}[4-9].*'
+	_requires[bash]='--version=^GNU bash, version [0-9]{0,1}[4-9].*'
 	_requires[sed]='--version=^sed (GNU sed) [0-9]{0,1}[4-9].*'
-	_requires[steamcmd]='=.*'
+	_requires[steamcmd]='skip'
 
 	for _prog in "${!_requires[@]}"; do
 		_arg="${_requires["$_prog"]%%=*}"
@@ -100,6 +100,9 @@ function __check_requirements () {
 
 		command -v "$_prog" >/dev/null 2>&1 ||\
 			die "${_prog} is required but is either not installed, or not in the execution PATH"
+
+		[[ "${_requires[$_prog]}" == 'skip' ]] &&\
+			continue
 
 		[[ "$("$_prog" "$_arg")" =~ $_string ]] ||\
 			die "${_prog} doesnt meet the minimum version requirements"
