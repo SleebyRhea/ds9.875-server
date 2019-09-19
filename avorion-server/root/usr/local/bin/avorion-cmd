@@ -91,7 +91,7 @@ function __check_requirements () {
 	# that will invoke them.
 	_requires[tmux]='-V=^[0-9]{0,1}[2-9]\.[0-9].*'
 	_requires[bash]='--version=^GNU bash, version [0-9]{0,1}[4-9].*'
-	_requires[sed]='--version=^sed (GNU sed) [0-9]{0,1}[4-9].*'
+	_requires[sed]='--version=^sed \(GNU sed\) [0-9]{0,1}[4-9].*'
 	_requires[steamcmd]='skip'
 
 	for _prog in "${!_requires[@]}"; do
@@ -552,6 +552,18 @@ function __show_service_instances () {
 	done
 }
 
+function __check_lock () {
+	return 0
+}
+
+function __lock_execution () {
+	return 0
+}
+
+function __unlock_execution () {
+	return 0
+}
+
 function main () {
 	__validate_setting_conf && source /etc/avorionsettings.conf
 	__assert_valid_execution
@@ -732,7 +744,7 @@ Commands:
 	resetsectors
 		Reset the given sectors or range of sectors.
 		${_grn}${CMDNAME} resetsectors <instance> <x:y, ...>${_clr}
-		${_grn}${CMDNAME} resetsectors <instance> <x:x-y:y>
+		${_grn}${CMDNAME} resetsectors <instance> <x:x-y:y>${_clr}
 	
 	backup
 		Take a backup of the given instance.
