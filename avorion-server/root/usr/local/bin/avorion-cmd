@@ -86,13 +86,12 @@ function plural () {
 function __check_requirements () {
 	local -A _requires
 	local _prog _arg _string
-
+	
 	# Required version strings, prepended with the argument
 	# that will invoke them.
 	_requires[tmux]='-V=^[0-9]{0,1}[2-9]\.[0-9].*'
 	_requires[bash]='--version=^GNU bash, version [0-9]{0,1}[4-9].*'
 	_requires[sed]='--version=^sed \(GNU sed\) [0-9]{0,1}[4-9].*'
-	_requires[steamcmd]='skip'
 
 	for _prog in "${!_requires[@]}"; do
 		_arg="${_requires["$_prog"]%%=*}"
@@ -314,8 +313,16 @@ function __restart_avorion_instance () {
 #	to install avorion if the server was not already
 #	present on the system.
 function __perform_update () {
-	local _units _inst
+	local _units _inst _steamcmd
 
+	# Quick check to make sure that SteamCMD is present either
+	# in steamcmd or steamcmd.sh form
+	if command -v steamcmd >/dev/null 2>&1 || command -v steamcmd.sh >/dev/null 2>&1; then
+		die "SteamCMD is required to be in the PATH for updates"
+	fi
+
+	_steamcmd="$(command -v steamcmd steamcmd.sh | grep -m1 ^)"
+	
 	# Die if there is already an update running.
 	[[ -d "/tmp/avorion/updatingavorion.lock" ]] &&\
 		die "Update process already running, or a stale lock is present (/tmp/avorion/updatingavorion.lock)."
@@ -692,7 +699,7 @@ function main () {
 
 		--help|help|-h)
 			cat << _EOF_
-Avorion Manager v${CMDVERS}
+Avorion Commander v${CMDVERS}
 Usage: ${CMDNAME} <command> <optons> <parameters>
 
 Commands:
