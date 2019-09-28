@@ -1,17 +1,15 @@
-#! /usr/bin/env bash
+#!/usr/bin/env bash
 
-CMDVERS='0.5.1'
+CMDVERS='2.0-testing rev1'
 CMDNAME="$(basename "$0")"
 EDATE="$(date +%s)"
 
 # void say <string, ...>
 #	Ouput the strings passed to stdout and return
 function say () {
-	for _l in "$@"; do
-		printf '%s\n' "${_l}"
-	done
+	for _l; do printf '%s\n' "${_l}"; done
 	return 0
-}
+} 
 
 # bool dbssay <string, ...>
 #	If the script is currently in debug mode, `say`
@@ -44,17 +42,15 @@ function die () {
 #	that string as a prompt.
 function yesno () {
 	local _prompt _answer
-	_prompt="${1-[Yes/No]}"
+	_prompt="${1-Yes/No}"
 
 	while true; do
-		printf '%s' "${_prompt}> "
-		read -r _answer
-
+		read -r _answer -p "[${_prompt}]> "
 		case "${_answer}" in
-			[yY][eE][sS] | [yY])
+			[yY][eE][sS] | [yY] )
 				return 0
 				;;
-			[nN][oO] | [nN])
+			[nN][oO] | [nN] )
 				return 1
 				;;
 			?)
@@ -92,6 +88,7 @@ function __check_requirements () {
 	_requires[tmux]='skip'
 	_requires[bash]='--version=^GNU bash, version [0-9]{0,1}[4-9].*'
 	_requires[sed]='--version=^sed \(GNU sed\) [0-9]{0,1}[4-9].*'
+	_requires[mktemp]='skip'
 
 	for _prog in "${!_requires[@]}"; do
 		_arg="${_requires["$_prog"]%%=*}"
@@ -154,6 +151,7 @@ function __validate_setting_conf () {
 	local __bad_symbols __err
 	__bad_symbols="[\\&^s\(\)%\[\]\#@!<>\'\",;:\{\}]"
 	__conf_vars[AVORION_ADMIN_GRP]='^[a-z][a-z]*$'
+	__conf_vars[AVORION_USER]='^[a-z][a-z]*$'
 	__conf_vars[AVORION_SERVICEDIR]='^/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
 	__conf_vars[AVORION_BINDIR]='^[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
 	__conf_vars[AVORION_STEAMID]='^[0-9][0-9]*$'
@@ -175,13 +173,13 @@ function __validate_setting_conf () {
 
 		# Ensure the line contains no invalid symbols
 		[[ "${__l}" =~ $__bad_symbols ]] &&\
-			die "${__err} -- Invalid chars present: <$( printf '%q' ${__l}) >"
+			die "${__err} -- Invalid chars present: <$( printf '%q' "${__l}") >"
 		
 		# Ensure that the variable declaration syntax is valid.
 		# We also use this to assign the captured strings to the
 		# BASH_REMATCH environment variable (bash does this automatically)
 		[[ "${__l}" =~ ^([^[:space:]][^[:space:]]*)=([^[:space:]][^[:space:]]*)$ ]] ||\
-			die "${__err} -- Bad syntax: <$( printf '%q' ${__l})>"
+			die "${__err} -- Bad syntax: <$( printf '%q' "${__l}")>"
 
 		# Ensure that the variable being declared is actually
 		# a setting that we will be making use of.
@@ -191,8 +189,8 @@ function __validate_setting_conf () {
 		# escape out any special characters. In this context, it is used
 		# to prevent special characters from potentially executing. This
 		# is also accomplished above, but I am paranoid
-		[[ -z "${__conf_vars[$( printf '%q' ${BASH_REMATCH[1]} )]}" ]] &&\
-			die "${__err} -- Invalid setting: <$( printf '%q' ${BASH_REMATCH[1]})>"
+		[[ -z "${__conf_vars[$( printf '%q' "${BASH_REMATCH[1]}" )]}" ]] &&\
+			die "${__err} -- Invalid setting: <$( printf '%q' "${BASH_REMATCH[1]}" )>"
 
 		# Make sure that the values given to the variable match a
 		# set syntax.
@@ -200,8 +198,8 @@ function __validate_setting_conf () {
 		# TODO: Perform some deeper checks here. IE, we would
 		#       want to catch things like having the admin group
 		#       set to sudo.
-		[[ "$( printf '%q' ${BASH_REMATCH[2]} )" =~ ${__conf_vars[$( printf '%q' ${BASH_REMATCH[1]} )]} ]] ||\
-			die "${__err} -- Invalid assignment: <$( printf '%q' ${__l})>"
+		[[ "$( printf '%q' "${BASH_REMATCH[2]} ")" =~ ${__conf_vars[$( printf '%q' "${BASH_REMATCH[1]}" )]} ]] ||\
+			die "${__err} -- Invalid assignment: <$( printf '%q' "${__l}")>"
 
 	done < /etc/avorionsettings.conf
 	
@@ -241,6 +239,7 @@ function __set_tmux_instance () {
 #	other unset globals
 function __set_globals () {
 	declare VERBOSE=0
+	declare NOSCREENCHECK=0
 	declare _tmuxsess _tmuxsock _instdir
 	
 	readonly _clr="$(tput sgr0 2>/dev/null)"		# prevent error spam when there is no $TERM
@@ -253,6 +252,15 @@ function __set_globals () {
 	readonly _tmuxcmd="$(which tmux)"
 	readonly _regex_sector_arg='^-{0,1}[0-9]{1,3}:-{0,1}[0-9]{1,3}(--{0,1}[0-9]{1,3}:-{0,1}[0-9]{1,3}|)$'
 	readonly _regex_sector_num='-{0,1}[0-9]{1,3}'
+	readonly TMP_FILE="$(mktemp)"
+
+	if [[ -z "$TMP_FILE" ]]; then
+		echo "Cannot generate tmpfile! Check tmp usage."
+		exit 1
+	else [[ -w "$TMP_FILE" ]]; then
+		echo "Cannot write to tmpfile <$TMP_FILE>. Check tmp permissions."
+		exit 1
+	fi
 }
 
 function __start_avorion_instance () {
@@ -303,6 +311,169 @@ function __restart_avorion_instance () {
 		return 1
 }
 
+function __check_incompatible_modlist () {
+	declare -A __mod_data __modded_insts
+	declare -a __failed_instances
+	local __avorion_version_string __instdir __modlist __pass __inst_comma __warn
+	local __curmaxverstring __newmaxverstring __curminverstring __newminverstring
+	local __minstring __maxstring __verbose_version_checks __fail_count
+
+	# Get the list of directories that contain a modded
+	# installation.
+	while read -r __instdir; do
+		# do not permit execution to continue on directories
+		# that contain special characters. 
+		[[ "$__instdir" =~ [^a-zA-Z0-9] ]] &&\
+			continue
+
+		## No point in attempting to operate on instances
+		## without any mods downloaded.
+		[[ -d "${__instdir}/workshop/content/" ]] ||\
+			continue
+
+		# Save only the instance name in the final array
+		__modded_insts["$( basename "$__instdir" )"]=PASS
+	done <<< "$( find "$AVORION_SERVICEDIR" -maxdepth 2 -type f -name modconfig.lua -printf '%h\n' 2>/dev/null )"
+
+	printf "Gathering data for version checking..."
+
+	## Gather mod information from all of the instances currently present.
+	for __inst in "${!__modded_insts[@]}"; do
+		## Parse out all of the workshop IDs for the operative instance
+		__modlist="$( sed -nr '
+			/^\s*\{\s*workshopid/ { 
+				s@^\s*\{\s*workshopid\s*=\s*("[0-9]+")\s*},.*@\1@
+				s,",,gp
+			}' "$AVORION_SERVICEDIR"/"$__inst"/modconfig.lua
+		)"
+
+		while read -r __modid; do
+			__newmaxverstring=''; __curmaxverstring=''
+			__newminverstring=''; __curminverstring=''
+			__inst_comma=','
+
+			if [[ ! "$__modid" =~ ^[0-9][0-9]*$ ]]; then
+				 say "	Incorrect MODID found in __check_incompatible_mods: <$__modid>"
+				 continue
+			fi
+
+			## Populate the array with the fields that we will be operating on.
+			## Fields are denoted by a ':'. Fields are as follows:
+			##		1. Max Version (The highest max version found in any instance dir)
+			##		2. Min Version (The highest min version found in any instance dir)
+			##		3. Instance List (list of instances that have this mod
+			if [[ -z "${__mod_data["$__modid"]}" ]]; then
+				__mod_data["$__modid"]='::'
+			fi
+
+			[[ "${__mod_data["$__modid"]//:/_}" =~ ^([^:]*):([^:]*):([^:]*)$ ]]
+			
+			__curmaxverstring="${BASH_REMATCH[1]}"
+			__curminverstring="${BASH_REMATCH[2]}"
+			__curinstlist="${BASH_REMATCH[3]}"
+
+			## Get the max version for the operative mod.
+			## TODO: Refine this into either a proper sed or awk parser.
+			__newmaxverstring="$(
+				grep max "${__inst}/workshop/content/${AVORION_STEAMID}/${__modid}/modinfo.lua" |\
+				grep -v '^[[:space:]]*\-\-' |\
+				grep 'id[[:space:]]*=[[:space:]]*"Avorion"' |\
+				grep -o 'max[[:space:]]*=[[:space:]]"[^\"]*"' |\
+				sed 's,[^0-9\.\*],,g;s,\n,,g'
+			)"
+			
+			## Get the min version for the operative mod
+			## TODO: Refine this into either a proper sed or awk parser.
+			__newminverstring="$(
+				grep min "${__inst}/workshop/content/${AVORION_STEAMID}/${__modid}/modinfo.lua" |\
+				grep -v '^[[:space:]]*\-\-' |\
+				grep 'id[[:space:]]*=[[:space:]]*"Avorion"' |\
+				grep -o 'min[[:space:]]*=[[:space:]]"[^\"]*"' |\
+				sed 's,[^0-9\.\*],,g;s,\n,,g'
+			)"
+
+			if [[ -z "$__curmaxverstring" ]] || __compare_version_string "$__newmaxverstring" "$__curmaxverstring"; then
+				__curmaxverstring="$__newmaxverstring"
+			fi
+
+			if [[ -z "$__curminverstring" ]] || __compare_version_string "$__newminverstring" "$__curminverstring"; then
+				__curminverstring="$__newminverstring"
+			fi
+
+			if [[ -z "$__curinstlist" ]]; then
+				__inst_comma=''
+			fi
+
+			__mod_data["$__modid"]="${__curmaxverstring}:${__curminverstring}:${__curinstlist}${__inst_comma}${__inst}"
+		done <<< "$__modlist"
+	done
+	
+	say Ready.
+
+	if yesno "Would you like verbose output?"; then
+		__verbose_version_checks=1
+		__warn='--warn'
+	fi
+
+	__fail_count=0
+
+	for __modid in "${!__mod_data[@]}"; do
+		__pass=1
+
+		(( __verbose_version_checks > 0 )) &&\
+		   	printf 'Checking Workshop Mod <%s>: ' "$__modid"
+
+		if [[ "${__mod_data["$__modid"]}" =~ ^([^:]*):([^:]*):([^:]*)$ ]]; then
+			(( __fail_count++ ))
+			say "Error: Bad mod data string: <${__mod_data["$__modid"]}>"
+			continue
+		fi
+
+		__maxstring="${BASH_REMATCH[1]}"
+		__minstring="${BASH_REMATCH[2]}"
+		__inst_list="${BASH_REMATCH[3]}"
+		
+		## Make sure our tmpfile is empty
+		echo "" > "$TMP_FILE"
+
+		if [[ -n "$__maxstring" ]]; then
+			__compare_version_string "$__warn" "$__maxstring" "$__avorion_version_string" >> "$TMP_FILE" ||\
+				__pass=0
+		fi
+
+		printf '\n' >> "$TMP_FILE"
+
+		if [[ -n "$__minstring" ]]; then
+			__compare_version_string "$__warn" "$__avorion_version_string" "$__minstring" >> "$TMP_FILE" ||\
+				__pass=0
+		fi
+
+		if (( __pass < 1 )); then
+			printf '%s\n' "Fail"
+			(( __fail_count++ ))
+			for __inst in ${__inst_list//,/ }; do
+				if ! grep -qE "(^$__inst | $__inst | $__inst$)" <<< "$__failed_instances" >/dev/null 2>&1; then
+					__modded_insts[$__inst]=FAIL
+				fi
+			done
+		fi
+
+		if (( __verbose_version_checks > 0 )); then
+			sed 's,.*,\t&,' "$TMP_FILE"
+		fi
+	done
+
+	printf 'Complete, %s/%s passed version checks. Final instance status:' \
+		"$(( ${#__mod_data[@]} - __fail_count ))" "${#__mod_data[@]}"
+
+	if (( __fail_count > 0 )); then
+		for __inst in "${!__modded_insts[@]}"; do
+			printf '\t%s:\t%s\n' "$__inst" "${__modded_insts["$__inst"]}"
+		done
+	fi
+
+	return "$__fail_count"
+}
 
 # void __perform_update <void>
 #	Perform a server update for the Avorion server
@@ -312,7 +483,8 @@ function __restart_avorion_instance () {
 #	to install avorion if the server was not already
 #	present on the system.
 function __perform_update () {
-	local _units _inst _steamcmd
+	local _units _inst _steamcmd _updatedir _failed _newversion _instdir _modname __ret
+	local -A _incompatible_mods
 
 	# Quick check to make sure that SteamCMD is present either
 	# in steamcmd or steamcmd.sh form
@@ -321,13 +493,17 @@ function __perform_update () {
 	fi
 
 	_steamcmd="$(command -v steamcmd steamcmd.sh | grep -m1 ^)"
-	
+	_updatedir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
+	_currentdir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}"
+	_failed=0
+
 	# Die if there is already an update running.
-	[[ -d "/tmp/avorion/updatingavorion.lock" ]] &&\
+	[[ -f "/tmp/avorion/updatingavorion.lock" ]] &&\
 		die "Update process already running, or a stale lock is present (/tmp/avorion/updatingavorion.lock)."
 
-	mkdir -p /tmp/updatingavorion.lock >/dev/null 2>&1 ||\
-		die "Unable to create avorion lockfile! Check /tmp usage."
+	touch /tmp/updatingavorion.lock >/dev/null 2>&1 ||\
+		die "Unable to create avorion lockfile! Check /tmp usage." &&\
+		echo "Updates locked."
 
 	# Make sure that the update lock is removed following this
 	# scripts end
@@ -344,17 +520,35 @@ function __perform_update () {
 		done <<< "${_units}"
 	fi
 
-	echo "Updates locked."
+	# Download the latest version to: "${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
+	# ex: /srv/avorion/server_dir.updatefiles
+	if ! sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" -n "$_steamcmd" +login anonymous +force_install_dir "$_updatedir" +app_update "$AVORION_STEAMID" validate +exit; then
+		_failed=1
+	fi
 
-	# Perform the update
-	"$_steamcmd" +login anonymous +force_install_dir "${AVORION_SERVICEDIR}/${AVORION_BINDIR}" +app_update "$AVORION_STEAMID" validate +exit
+	# Acquire the Avorion version of the new update
+	__newversion="$( "$_updatedir"/bin/AvorionServer --version | tr -dc '0-9.\*')"
+
+	if yesno "Would you like to check for incompatible mods?"; then
+		if ! __check_incompatible_mods "$__newversion"; then
+			true
+		fi
+	fi
 
 	# If any instances were up prior to the update, re-start them
 	if [[ -n "${_units}" ]]; then
 		while read -r _inst; do
 			__inst="${_inst%%.service}"
-			__start_avorion_instance "${_inst}"
+			if ! __start_avorion_instance "${_inst}"; then
+				_failed=1
+				
+			fi
 		done <<< "${_units}"
+	fi
+
+	if ! (( _failed > 0 )); then
+		rm -rf "$_updatedir" >/dev/null 2&1
+		exit 1
 	fi
 
 	exit 0
@@ -378,7 +572,7 @@ function __perform_sector_reset () {
 	local _save _sector _bakdir _secdir
 	local _x1 _x2 _y1 _y2
 	local -a _sector_array
-	_save=0; 
+	_save=0
 	_secdir="${AVORION_SERVICEDIR}/${_tmuxsess}/sectors/${EDATE}"
 
 	# If the first argument is `--backups` then we don't need to confirm backups, we assume yes.
@@ -403,10 +597,10 @@ function __perform_sector_reset () {
 			_sector="${1//:/_}"
 			if ! [[ -f "${_secdir}/${_sector}" ]]; then
 				dbgsay "Sector <${_sector}> doesn't exist. Skipping."
-				shift; continue
+			else
+				dbgsay "Queueing sector: <${_sector}>"
+				_sector_array+=( "${_secdir}/${_sector}" )
 			fi
-			dbgsay "Queueing sector: <${_sector}>"
-			_sector_array+=( "${_secdir}/${_sector}" )
 			shift; continue
 
 		# Only follow this path if the argument given is the defined range
@@ -417,8 +611,8 @@ function __perform_sector_reset () {
 		elif [[ "$1" =~ ^(-{0,1}[0-9]{1,3}):(-{0,1}[0-9]{1,3})-(-{0,1}[0-9]{1,3}):(-{0,1}[0-9]{1,3})$ ]]; then
 			_x1="${BASH_REMATCH[1]}"; _x2="${BASH_REMATCH[2]}"
 			_y1="${BASH_REMATCH[3]}"; _y2="${BASH_REMATCH[4]}"
-			for _x in {"$_x1".."$_x2"}; do
-				for _y in {"$_y1".."$_y2"}; do
+			for _x in $(seq "$_x1" "$_x2"); do
+				for _y in $(seq "$_y1" "$_y2"); do
 					if ! [[ -f "${_secdir}/${_x}_${_y}" ]]; then
 						dbgsay "Sector <${_x}_${_y}> doesn't exist. Skipping."
 						continue
@@ -454,7 +648,7 @@ function __perform_sector_reset () {
 	# delete.
 	for _sector in "${_sector_array[@]}"; do
 		(( _save == 1 )) &&\
-			cp "${_sector}" "$_bakdir"
+			cp "$_sector" "${_bakdir}/"
 		rm "${_sector}"
 	done
 }
@@ -497,9 +691,9 @@ function __perform_config_edits () {
 
 	if [[ -z "${VISUAL}" ]]; then
 		if [[ -z "${EDITOR}" ]]; then
-			command -v nano >/dev/null 2>&1 \
-				|| __editor="vi" \
-				&& __editor="nano"
+			command -v nano >/dev/null 2>&1 ||\
+				__editor="vi" &&\
+				__editor="nano"
 		else
 			__editor="${EDITOR}"
 		fi
@@ -513,14 +707,14 @@ function __perform_config_edits () {
 		|| die "Unable to write to <${__temp_file}>"
 	
 	echo "Stopping avorion@${__instance}.service..."
-	sudo systemctl stop avorion@"${__instance}" >/dev/null
+	__stop_avorion_instance "$__instance" >/dev/null
 
 	mv "$__temp_file" "$__inst_file" \
 		|| say "Unable to make changes to instance settings"
 
 	echo "Starting avorion@${__instance}.service..."
-	sudo systemctl start avorion@"${__instance}" \
-		|| die "Unable to start!!"
+	__start_avorion_instance "$__instance" \
+		|| die "Unable to start!"
 }
 
 # void __show_service_instances <void>
@@ -528,7 +722,7 @@ function __perform_config_edits () {
 #	instances. Then, print them (formatted) to the screen
 #	and exit
 function __show_service_instances () {
-	if (( ! "$(find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' | wc -l)" > 0 )); then
+	if ! (( "$(find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' -printf '.' | wc -c)" > 0 )); then
 		echo "No service instances running"
 		exit 1
 	fi
@@ -571,8 +765,10 @@ function __unlock_execution () {
 }
 
 function __check_screen_tmux () {
-# Die if we are running in a screen or tmux session.
-	# TODO: Migrate check to functions that operate on TMUX sessions
+	# Skip this if --no-screen-enforce is passed
+	(( NOSCREENCHECK > 0 )) && return 1
+
+	# Die if we are running in a screen or tmux session.
 	if [[ -n "$TMUX" ]] || [[ ! "$TERM" =~ ^(screen|tmux) ]] || [[ -n "$TMUX_PANE" ]] || [[ -n "$STY" ]]; then
 		return 0
 	fi
@@ -587,17 +783,22 @@ function main () {
 
 	local __err_bad_inst='Invalid instance passed:'
 
+	# Check for the existence of the given strings in the positional
+	# parameter list. If they exist, remove it from said parameter
+	# list and continue execution.
 	for _arg; do
 		shift
-		if [[ "${_arg}" == --debug ]]; then
-			VERBOSE=1
-			continue
-		fi
+
+		case "$1" in
+			--debug) VERBOSE=1; continue ;;
+			--no-screen-block) NOSCREENCHECK=1; continue;;
+		esac
+
 		set -- "$@" "${_arg}"
 	done
 
 	case "$1" in
-		start)
+		start )
 			__check_screen_tmux &&\
 				die "$CMDNAME $1 should not be run in a screen or tmux session"
 
@@ -609,7 +810,7 @@ function main () {
 				exit 0
 			;;
 
-		stop)
+		stop )
 			__check_screen_tmux &&\
 				die "$CMDNAME $1 should not be run in a screen or tmux session"
 
@@ -621,7 +822,7 @@ function main () {
 				exit 0
 			;;
 
-		restart)
+		restart )
 			__check_screen_tmux &&\
 				die "$CMDNAME $1 should not be run in a screen or tmux session"
 
@@ -633,13 +834,13 @@ function main () {
 				exit 0
 			;;
 		
-		lock)
+		lock )
 			__set_tmux_instance "$2" ||\
 				die "${__err_bad_inst} <$2>"
 			exit 0
 			;;
 
-		view | attach)
+		view | attach )
 			__check_screen_tmux &&\
 				die "$CMDNAME $1 should not be run in a screen or tmux session"
 
@@ -651,7 +852,7 @@ function main () {
 				exit 0
 			;;
 		
-		exec)
+		exec )
 			__check_screen_tmux &&\
 				die "$CMDNAME $1 should not be run in a screen or tmux session"
 
@@ -664,19 +865,19 @@ function main () {
 				exit 0
 			;;
 		
-		update)
+		update )
 			__perform_update ||\
 				exit 1 &&\
 				exit 0
 			;;
 		
-		showinstances|-I)
+		showinstances | -I )
 			__show_service_instances ||\
 				exit 1 &&\
 				exit 0
 			;;
 
-		backup)
+		backup )
 			__get_instance_dir ||\
 				die "${__err_bad_inst} <$2>"
 
@@ -685,7 +886,7 @@ function main () {
 				exit 0
 			;;
 
-		config)
+		config )
 			__set_tmux_instance "$2" ||\
 				die "${__err_bad_inst} <$2>"
 
@@ -697,7 +898,7 @@ function main () {
 				exit 0
 			;;
 
-		resetsector)
+		resetsector )
 			__set_tmux_instance "$2" ||\
 				die "${__err_bad_inst} <$2>"
 
@@ -715,13 +916,13 @@ function main () {
 				exit 0
 			;;
 
-		usage|--usage|-u)
+		usage | --usage | -u )
 			say "Avorion Manager v${CMDVERS}"
 			say "Usage: ${CMDNAME} <command> <optons> <parameters>"
 			exit 0
 			;;
 
-		--help|help|-h)
+		--help | help | -h )
 			cat << _EOF_
 Avorion Commander v${CMDVERS}
 Usage: ${CMDNAME} <command> <optons> <parameters>
@@ -789,16 +990,107 @@ _EOF_
 			exit 0
 			;;
 
-		-V|--version)
+		-V | --version )
 			echo "${CMDVERS}"
 			exit 0
 			;;
 
-		?)
+		? )
 			printf '%s\n' "Invalid argument passed: <$1>"
 			exit 1
 			;;
 	esac
+}
+
+#@@@@@@@@@@@#
+# Utilities #
+#@@@@@@@@@@@#
+
+# int __compare_version_string (str $1, str $2)
+#	Determine whether or not the version string $1 is either a later
+#	or matching revision to string $2. Returns true if so, and false if
+#	otherwise.
+#
+#	Options:
+#		--display-warnings	Displays various warnings regarding why
+#		a string may have failed, or if there is amgiguity regarding
+#		its version matching (eg: Wildcards)
+function __compare_version_string () {
+	local __do_warn=0
+	
+	for __arg; do
+		shift
+		if [[ "$1" == "--warn" ]]; then
+			__do_warn=1
+			continue
+		fi
+		set -- "$@" "$__arg"
+	done
+
+	(( $# < 2 )) &&\
+		die "Syntax error in __compare_version_string: Not enough arguments"
+	
+	local -a __checkstr_arr __basestr_arr
+	local __check __base
+	local __checkstr="$2"
+	local __basestr="$2"
+	local __pass=1
+	local __warn=0
+	local __diff=0
+	
+	__checkstr="${__checkstr//\*/?}"
+	__basestr="${__basestr//\*/?}"
+
+	for n in ${__checkstr//./ }; do
+		__checkstr_arr+=( "$n" )
+	done
+
+	for n in ${__basestr//./ }; do
+		__basestr_arr+=( "$n" )
+	done
+		
+	for i in "${!__basestr_arr[@]}"; do
+		__base="${__basestr_arr[$i]}"
+		__check="${__checkstr_arr[$i]}"
+		
+		if [[ "$__check" == '?' ]] || [[ "$__base" == '?' ]]; then
+			__warn=1
+			__pass=1
+			break
+		elif [[ -z "$__check" ]] || [[ -z "$__base" ]]; then
+			__warn=2
+			__pass=1
+			break
+		fi
+		
+		if (( __base < __check )); then
+			__diff=$(( $__base - $__check ))
+			break
+			
+		elif (( __base > __check )); then
+			__pass=0
+			break
+		fi
+	done
+	
+	if (( __pass < 1 )); then
+		continue
+	fi
+	
+	case "$__warn" in
+		1 ) printf '\t%s\n' \
+				"Wildcard version string is in use: <${__checkstr//\?/*}>"
+			;;
+			
+		2 ) printf '\t%s\n' \
+				"Version string missing latest point release: <${__checkstr//\?/*}> "
+			;;
+	esac
+	
+	if (( __diff > 0 )); then
+		printf '\t%s\n' \
+				"Passing point release is $__diff higher than current update: <${__checkstr//\?/*}>"
+	fi    
 }
 
 main "$@"
