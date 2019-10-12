@@ -7,6 +7,7 @@ PartOf=avorionservers.target
 Type=forking
 User=avorion
 Group=dsnineadm
+PIDFile=/srv/avorion/%1/instance.pid
 WorkingDirectory=/srv/avorion
 ProtectSystem=full
 PrivateUsers=true
