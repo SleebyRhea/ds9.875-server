@@ -155,6 +155,7 @@ function __validate_setting_conf () {
 	__conf_vars[AVORION_SERVICEDIR]='^/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
 	__conf_vars[AVORION_BINDIR]='^[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
 	__conf_vars[AVORION_STEAMID]='^[0-9][0-9]*$'
+	__conf_vars[STEAMCMD_BIN]='^(/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*[a-zA-Z0-9_\-]|)$'
 
 	# Leaving this here for now, but this used to check for invalid options
 	# being set in the configuration file
@@ -257,10 +258,56 @@ function __set_globals () {
 	if [[ -z "$TMP_FILE" ]]; then
 		echo "Cannot generate tmpfile! Check tmp usage."
 		exit 1
-	else [[ -w "$TMP_FILE" ]]; then
+	elif [[ -w "$TMP_FILE" ]]; then
 		echo "Cannot write to tmpfile <$TMP_FILE>. Check tmp permissions."
 		exit 1
 	fi
+}
+
+# bool __set_instance_tracking (str $1)
+#	Add the given instance to the tracking file. This function is intended to be used in a
+#	as a more robust form of tracking the instances that shold be active at any point in
+#	time
+function __set_instance_tracking () {
+	(( $# > 0 )) ||\
+		die "__set_instance_tracking requires an instance name! "
+
+	if ! grep -q "^${1}$" "${AVORION_SERVICEDIR}/active" >/dev/null 2>&1; then
+		echo "$1" >> "${AVORION_SERVICEDIR}/active"
+		return 1
+	fi
+}
+
+function __unset_instance_tracking () {
+	sed "/^${1}$/" "${AVORION_SERVICEDIR}/active" 
+}
+
+function __check_tracked_instances () {
+	local __failed=0
+	if [[ -f "${AVORION_SERVICEDIR}/active" ]]; then
+		while read -r __instance; do
+			if ! sudo -n systemctl status "${__instance}.service" >/dev/null 2>&1; then
+				if __start_avorion_instance "$__instance"; then
+					dbgsay "Sleeping for 30 seconds to check for successful startup"
+					sleep 30
+					if [[ ! -f "${AVORION_SERVICEDIR}/${__instance}/instance.pid" ]]; then
+						((__failed++))
+						echo "Instance <${__instance}> failed after startup!"
+					fi
+				fi
+			fi
+		done <  "${AVORION_SERVICEDIR}/active"
+
+		if (( __failed > 0 )); then
+			say "${__failed} isntances failed to startup successfully"
+			return "$__failed"
+		fi
+
+		return 0
+	fi
+
+	dbgsay "No active instances file present! <${AVORION_SERVICEDIR}/active>"
+	return 0
 }
 
 function __start_avorion_instance () {
@@ -486,20 +533,25 @@ function __perform_update () {
 	local _units _inst _steamcmd _updatedir _failed _newversion _instdir _modname __ret
 	local -A _incompatible_mods
 
-	# Quick check to make sure that SteamCMD is present either
-	# in steamcmd or steamcmd.sh form
-	if command -v steamcmd >/dev/null 2>&1 || command -v steamcmd.sh >/dev/null 2>&1; then
-		die "SteamCMD is required to be in the PATH for updates"
-	fi
-
-	_steamcmd="$(command -v steamcmd steamcmd.sh | grep -m1 ^)"
 	_updatedir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	_currentdir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}"
 	_failed=0
+	
+	# Quick check to make sure that SteamCMD is present either
+	# in steamcmd or steamcmd.sh form
+	if [[ -f "$STEAMCMD_BIN" ]] || command -v "$STEAMCMD_BIN" 2>/dev/null; then
+		_steamcmd="$STEAMCMD_BIN"
+	else 
+		_steamcmd="$(command -v steamcmd 2>/dev/null | grep -m 1 )"
+		if [[ -z "$_steamcmd" ]]; then
+			die "SteamCMD definition is undefined, or invalid"
+		fi
+	fi
 
 	# Die if there is already an update running.
-	[[ -f "/tmp/avorion/updatingavorion.lock" ]] &&\
+	if [[ -f "/tmp/avorion/updatingavorion.lock" ]]; then
 		die "Update process already running, or a stale lock is present (/tmp/avorion/updatingavorion.lock)."
+	fi
 
 	touch /tmp/updatingavorion.lock >/dev/null 2>&1 ||\
 		die "Unable to create avorion lockfile! Check /tmp usage." &&\
@@ -530,7 +582,7 @@ function __perform_update () {
 	__newversion="$( "$_updatedir"/bin/AvorionServer --version | tr -dc '0-9.\*')"
 
 	if yesno "Would you like to check for incompatible mods?"; then
-		if ! __check_incompatible_mods "$__newversion"; then
+		if ! __check_incompatible_modlist "$__newversion"; then
 			true
 		fi
 	fi
@@ -552,10 +604,6 @@ function __perform_update () {
 	fi
 
 	exit 0
-}
-
-function __perform_backup () {
-	return 1
 }
 
 # bool __perform_sector_reset <options> <int/string, ...>
@@ -721,6 +769,7 @@ function __perform_config_edits () {
 #	Locate and verify current online and offline
 #	instances. Then, print them (formatted) to the screen
 #	and exit
+#	TODO: Adapt this function to use the AVORION_SERVIOCEDIR/active file.
 function __show_service_instances () {
 	if ! (( "$(find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' -printf '.' | wc -c)" > 0 )); then
 		echo "No service instances running"
