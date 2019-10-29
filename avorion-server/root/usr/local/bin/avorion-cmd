@@ -299,7 +299,7 @@ function __check_tracked_instances () {
 		done <  "${AVORION_SERVICEDIR}/active"
 
 		if (( __failed > 0 )); then
-			say "${__failed} isntances failed to startup successfully"
+			say "${__failed} instances failed to startup successfully"
 			return "$__failed"
 		fi
 
@@ -531,7 +531,6 @@ function __check_incompatible_modlist () {
 #	present on the system.
 function __perform_update () {
 	local _units _inst _steamcmd _updatedir _failed _newversion _instdir _modname __ret
-	local -A _incompatible_mods
 
 	_updatedir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	_currentdir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}"
@@ -583,8 +582,30 @@ function __perform_update () {
 
 	if yesno "Would you like to check for incompatible mods?"; then
 		if ! __check_incompatible_modlist "$__newversion"; then
-			true
+			if ! yesno "Incompatible mods found, would you still like to proceed?"; then
+				say "Removing update files and aborting..."
+				rm -rf "$_updatedir" >/dev/null
+				die "Done."
+			fi
 		fi
+	fi
+
+	# If there is prior server data, move that to a backup, just in case.
+	if [[ -d "$_currentdir" ]]; then
+		mv "$_currentdir" "${_currentdir}.updatebak" ||\
+			die "Unable to migrate old server installation!"
+	fi
+
+	# Attempt to move the updated data to its final destination. Upon failure,
+	# attempt to reevert, and exit
+	if ! mv "$_updatedir" "$_currentdir"; then
+		say "Unable to move update date to ${_currentdir}!"
+		if [[ -d "${_currentdir}.updatebak" ]]; then
+			mv "${_currentdir}.updatebak" "${_currentdir}" ||\
+				say "Failed to revert changes to ${_currentdir}!"	
+		fi
+		
+		die "Aborting."
 	fi
 
 	# If any instances were up prior to the update, re-start them
@@ -707,6 +728,8 @@ function __perform_sector_reset () {
 #	correct instance directory. Note that this stops
 #	the instance before installing the edits, as Avorion
 #	will overwrite the edits made on restart.
+#	
+#	TODO: This is *very* WIP, use at your own risk
 function __perform_config_edits () {
 	__assert_valid_user_input "$2" \
 		|| die "Invalid file passed: <$2>" \
@@ -749,6 +772,7 @@ function __perform_config_edits () {
 		__editor="${VISUAL}"
 	fi
 
+	# Ignore shellcheck here, we **want** this to expand
 	trap "rm ${__temp_file} >/dev/null 2>&1 && echo 'Removed tempfile' || echo 'Unable to remove tempfile'" EXIT SIGTERM
 
 	"${__editor}" "${__temp_file}" \
@@ -801,16 +825,15 @@ function __show_service_instances () {
 	done
 }
 
-function __check_lock () {
-	return 0
-}
+# bool __check_execution_lock (str __function)
+#	Check for our exection lockfile and prevent
+#	execution if one is found. Optionally, a string
+#	can be passed to prevent execution on a function,
+#	rather than a general lock.
+function __check_execution_lock () {
+	(( $# > 1 )) &&\
+	   die "Too many arguments passed to __check_execution_lock"
 
-function __lock_execution () {
-	return 0
-}
-
-function __unlock_execution () {
-	return 0
 }
 
 function __check_screen_tmux () {
@@ -840,7 +863,7 @@ function main () {
 
 		case "$1" in
 			--debug) VERBOSE=1; continue ;;
-			--no-screen-block) NOSCREENCHECK=1; continue;;
+			--allow-screen) NOSCREENCHECK=1; continue;;
 		esac
 
 		set -- "$@" "${_arg}"
@@ -909,7 +932,7 @@ function main () {
 				|| die "${__err_bad_inst} <$2>"
 
 			shift; shift
-			"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" send-keys "$@" ENTER \; attach -r ||\
+			"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" send-keys ENTER "$@" ENTER \; attach -r ||\
 				exit 1 &&\
 				exit 0
 			;;
@@ -953,7 +976,7 @@ function main () {
 
 			shift; shift
 			
-			for _secarg in "$@"; do
+			for _secarg; do
 				# Regex to match the following cases: x:y, or x1:y1-x2:y2
 				# while supporting negatives.
 				[[ "$_secarg" =~ ${_regex_sector_arg} ]] ||\
@@ -1026,7 +1049,8 @@ Commands:
 		Reset the given sectors or range of sectors.
 		${_grn}${CMDNAME} resetsectors <instance> <x:y, ...>${_clr}
 		${_grn}${CMDNAME} resetsectors <instance> <x:x-y:y>${_clr}
-	
+		${_yel}This function is a work-in-progress!	
+
 	backup
 		Take a backup of the given instance.
 		${_grn}${CMDNAME} backup <instance>${_clr}
@@ -1061,7 +1085,7 @@ _EOF_
 #	otherwise.
 #
 #	Options:
-#		--display-warnings	Displays various warnings regarding why
+#		--warn	Displays various warnings regarding why
 #		a string may have failed, or if there is amgiguity regarding
 #		its version matching (eg: Wildcards)
 function __compare_version_string () {
@@ -1087,6 +1111,8 @@ function __compare_version_string () {
 	local __warn=0
 	local __diff=0
 	
+	## Prevent * from breaking everything by replacing those with
+	## '?' characters. (* will expand into filenames, ? will not.
 	__checkstr="${__checkstr//\*/?}"
 	__basestr="${__basestr//\*/?}"
 
@@ -1113,7 +1139,7 @@ function __compare_version_string () {
 		fi
 		
 		if (( __base < __check )); then
-			__diff=$(( $__base - $__check ))
+			__diff="$(( __base - __check ))"
 			break
 			
 		elif (( __base > __check )); then
@@ -1123,23 +1149,25 @@ function __compare_version_string () {
 	done
 	
 	if (( __pass < 1 )); then
-		continue
+		return 1
 	fi
 	
-	case "$__warn" in
-		1 ) printf '\t%s\n' \
-				"Wildcard version string is in use: <${__checkstr//\?/*}>"
-			;;
-			
-		2 ) printf '\t%s\n' \
-				"Version string missing latest point release: <${__checkstr//\?/*}> "
-			;;
-	esac
+	if (( __do_warn > 0 )); then
+		case "$__warn" in
+			1 ) printf '\t%s\n' \
+					"Wildcard version string is in use: <${__checkstr//\?/*}>"
+				;;
+				
+			2 ) printf '\t%s\n' \
+					"Version string missing latest point release: <${__checkstr//\?/*}> "
+				;;
+		esac
 	
-	if (( __diff > 0 )); then
-		printf '\t%s\n' \
-				"Passing point release is $__diff higher than current update: <${__checkstr//\?/*}>"
-	fi    
+		if (( __diff > 0 )); then
+			printf '\t%s\n' \
+					"Passing point release is $__diff higher than current update: <${__checkstr//\?/*}>"
+		fi    
+	fi
 }
 
 main "$@"
