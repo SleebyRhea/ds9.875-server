@@ -242,7 +242,7 @@ function __set_globals () {
 	declare NOSCREENCHECK=0
 	declare _tmuxsess _tmuxsock _instdir
 	
-	readonly _clr="$(tput sgr0 2>/dev/null)"		# prevent error spam when there is no $TERM
+	readonly _clr="$(tput sgr0 2>/dev/null)a"		# prevent error spam when there is no $TERM
 	readonly _bld="$(tput bold 2>/dev/null)"		# such as when run from systemd unit
 	readonly _red="$(tput setaf 1 2>/dev/null)"
 	readonly _grn="$(tput setaf 2 2>/dev/null)"
@@ -293,8 +293,8 @@ function __stop_avorion_instance () {
 	"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/${1}.sock" \
 		send-keys ENTER "/say Stopping Avorion..." ENTER "/save" ENTER "/stop"
 
-	## Continue looping while **either** the process pidfile exists, or the /proc/pid directory is extant
-	while [[ -f "$AVORION_SERVICEDIR/$1/instance.pid" ]] || [[ -d "/proc/$_pid" ]]; do
+	## Continue looping while the /proc/$_pid/exe points to the correct executable
+	while [[ -d "/proc/$_pid" ]] && grep -q " $AVORION_BINDIR/bin/AvorionServer --galaxy-name ${1} " "/proc/$_pid/cmdline" >/dev/null 2>&1; do
 		if ((_time < 1000 )); then
 			printf '.'
 		else
