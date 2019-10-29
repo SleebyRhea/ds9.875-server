@@ -281,15 +281,21 @@ function __start_avorion_instance () {
 
 function __stop_avorion_instance () {
 	local _time=0
-	if ! systemctl status avorion@"$1"; then
+	local _pid
+
+	if ! systemctl status avorion@"$1".service; then
 		return 0
 	fi
+
+	## Get the operating PID for that intance
+	_pid="$(cat "$AVORION_SERVICEDIR/$1/instance.pid" | tr -d '\n')"
 
 	printf 'Stopping <%s> instance, this could take a while' "$1"
 	"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/${1}.sock" \
 		send-keys ENTER "/say Stopping Avorion..." ENTER "/save" ENTER "/stop"
 
-	while pgrep -a AvorionServer | grep -q "/${1}.sock"; do
+	## Continue looping while **either** the process pidfile exists, or the /proc/pid directory is extant
+	while [[ -f "$AVORION_SERVICEDIR/$1/instance.pid" ]] || [[ -d "/proc/$_pid" ]]; do
 		if ((_time < 1000 )); then
 			printf '.'
 		else
