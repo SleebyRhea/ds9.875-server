@@ -264,52 +264,6 @@ function __set_globals () {
 	fi
 }
 
-# bool __set_instance_tracking (str $1)
-#	Add the given instance to the tracking file. This function is intended to be used in a
-#	as a more robust form of tracking the instances that shold be active at any point in
-#	time
-function __set_instance_tracking () {
-	(( $# > 0 )) ||\
-		die "__set_instance_tracking requires an instance name! "
-
-	if ! grep -q "^${1}$" "${AVORION_SERVICEDIR}/active" >/dev/null 2>&1; then
-		echo "$1" >> "${AVORION_SERVICEDIR}/active"
-		return 1
-	fi
-}
-
-function __unset_instance_tracking () {
-	sed "/^${1}$/" "${AVORION_SERVICEDIR}/active" 
-}
-
-function __check_tracked_instances () {
-	local __failed=0
-	if [[ -f "${AVORION_SERVICEDIR}/active" ]]; then
-		while read -r __instance; do
-			if ! sudo -n systemctl status "${__instance}.service" >/dev/null 2>&1; then
-				if __start_avorion_instance "$__instance"; then
-					dbgsay "Sleeping for 30 seconds to check for successful startup"
-					sleep 30
-					if [[ ! -f "${AVORION_SERVICEDIR}/${__instance}/instance.pid" ]]; then
-						((__failed++))
-						echo "Instance <${__instance}> failed after startup!"
-					fi
-				fi
-			fi
-		done <  "${AVORION_SERVICEDIR}/active"
-
-		if (( __failed > 0 )); then
-			say "${__failed} instances failed to startup successfully"
-			return "$__failed"
-		fi
-
-		return 0
-	fi
-
-	dbgsay "No active instances file present! <${AVORION_SERVICEDIR}/active>"
-	return 0
-}
-
 function __start_avorion_instance () {
 	printf 'Attempting to starting <%s....n' "${__inst}"
 	if ! systemctl status avorion@"$1" >/dev/null 2<&1; then
@@ -793,7 +747,6 @@ function __perform_config_edits () {
 #	Locate and verify current online and offline
 #	instances. Then, print them (formatted) to the screen
 #	and exit
-#	TODO: Adapt this function to use the AVORION_SERVIOCEDIR/active file.
 function __show_service_instances () {
 	if ! (( "$(find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' -printf '.' | wc -c)" > 0 )); then
 		echo "No service instances running"
