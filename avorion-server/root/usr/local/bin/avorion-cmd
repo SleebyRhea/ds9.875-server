@@ -767,12 +767,6 @@ function __show_service_instances () {
 			systemctl status avorion@"${_instance}" >/dev/null 2>&1 \
 				&& echo "${_instance} (avorion@${_instance}) -- ${_grn}Online${_clr}" \
 				|| echo "${_instance} (avorion@${_instance}) -- ${_red}Offline${_clr}"
-
-		elif [[ "$_instance" =~ ^steam(cmd|cli)$ ]]; then
-			systemctl status "${_instance}" >/dev/null 2>&1 \
-				&& echo "${_instance} (steamcmd.service) -- ${_grn}Online${_clr}" \
-				|| echo "${_instance} (steamcmd.service) -- ${_yel}Offline (normal)${_clr}"
-
 		else
 			if [[ -f "/etc/systemd/system/${_instance}.service" ]]; then
 				systemctl status "${_instance}" >/dev/null 2>&1 \
@@ -1007,7 +1001,11 @@ Commands:
 		Reset the given sectors or range of sectors.
 		${_grn}${CMDNAME} resetsectors <instance> <x:y, ...>${_clr}
 		${_grn}${CMDNAME} resetsectors <instance> <x:x-y:y>${_clr}
-		${_yel}This function is a work-in-progress!	
+		${_yel}This function is a work-in-progress!
+
+	resetplayer
+		Resets the given player or players
+		${_yel}NOTICE: Not currently implemented${_clr}
 
 	backup
 		Take a backup of the given instance.
