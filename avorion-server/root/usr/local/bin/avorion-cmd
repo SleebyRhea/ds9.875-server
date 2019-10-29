@@ -152,7 +152,7 @@ function __validate_setting_conf () {
 	__bad_symbols="[\\&^s\(\)%\[\]\#@!<>\'\",;:\{\}]"
 	__conf_vars[AVORION_ADMIN_GRP]='^[a-z][a-z]*$'
 	__conf_vars[AVORION_USER]='^[a-z][a-z]*$'
-	__conf_vars[AVORION_SERVICEDIR]='^/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
+	__conf_vars[AVORION_SERVICEDIR]='^/[a-zA-Z0-9_\-][a-zA-Z0-9_\-\/]*$'
 	__conf_vars[AVORION_BINDIR]='^[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
 	__conf_vars[AVORION_STEAMID]='^[0-9][0-9]*$'
 	__conf_vars[STEAMCMD_BIN]='^(/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*[a-zA-Z0-9_\-]|)$'
@@ -199,7 +199,7 @@ function __validate_setting_conf () {
 		# TODO: Perform some deeper checks here. IE, we would
 		#       want to catch things like having the admin group
 		#       set to sudo.
-		[[ "$( printf '%q' "${BASH_REMATCH[2]} ")" =~ ${__conf_vars[$( printf '%q' "${BASH_REMATCH[1]}" )]} ]] ||\
+		[[ "$( printf '%q' "${BASH_REMATCH[2]}" )" =~ ${__conf_vars[$( printf '%q' "${BASH_REMATCH[1]}" )]} ]] ||\
 			die "${__err} -- Invalid assignment: <$( printf '%q' "${__l}")>"
 
 	done < /etc/avorionsettings.conf
@@ -212,8 +212,7 @@ function __validate_setting_conf () {
 #	is a valid (and active) tmux controlled instance
 #	and set the tmux socket and session globals
 function __set_tmux_instance () {
-	[[ -z "$1" ]] \
-		|| return 1
+	[[ -z "$1" ]] || return 1
 
 	# Strip bad chars from user input
 	_tmuxsess="$1"
