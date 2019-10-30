@@ -45,7 +45,8 @@ function yesno () {
 	_prompt="${1-Yes/No}"
 
 	while true; do
-		read -r _answer -p "[${_prompt}]> "
+		printf "[%s]> " "${_prompt}"
+		read -r _answer
 		case "${_answer}" in
 			[yY][eE][sS] | [yY] )
 				return 0
@@ -154,8 +155,9 @@ function __validate_setting_conf () {
 	__conf_vars[AVORION_USER]='^[a-z][a-z]*$'
 	__conf_vars[AVORION_SERVICEDIR]='^/[a-zA-Z0-9_\-][a-zA-Z0-9_\-\/]*$'
 	__conf_vars[AVORION_BINDIR]='^[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
+	__conf_vars[AVORION_BAKDIR]='^\/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
 	__conf_vars[AVORION_STEAMID]='^[0-9][0-9]*$'
-	__conf_vars[STEAMCMD_BIN]='^(/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*[a-zA-Z0-9_\-]|)$'
+	__conf_vars[STEAMCMD_BIN]='^(/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/\.]*[a-zA-Z0-9]|steamcmd)$'
 
 	# Leaving this here for now, but this used to check for invalid options
 	# being set in the configuration file
@@ -238,7 +240,7 @@ function __set_globals () {
 	declare NOSCREENCHECK=0
 	declare _tmuxsess _tmuxsock _instdir
 	
-	readonly _clr="$(tput sgr0 2>/dev/null)a"		# prevent error spam when there is no $TERM
+	readonly _clr="$(tput sgr0 2>/dev/null)"		# prevent error spam when there is no $TERM
 	readonly _bld="$(tput bold 2>/dev/null)"		# such as when run from systemd unit
 	readonly _red="$(tput setaf 1 2>/dev/null)"
 	readonly _grn="$(tput setaf 2 2>/dev/null)"
@@ -253,7 +255,7 @@ function __set_globals () {
 	if [[ -z "$TMP_FILE" ]]; then
 		echo "Cannot generate tmpfile! Check tmp usage."
 		exit 1
-	elif [[ -w "$TMP_FILE" ]]; then
+	elif [[ ! -w "$TMP_FILE" ]]; then
 		echo "Cannot write to tmpfile <$TMP_FILE>. Check tmp permissions."
 		exit 1
 	fi
@@ -490,13 +492,18 @@ function __perform_update () {
 	_updatedir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	_currentdir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}"
 	_failed=0
+
+	## Overwrite default environment to fix sudo+steamcmd stupidity
+	USER="$AVORION_USER"
+	GROUP="$AVORION_ADMIN_GRP"
+	HOME="$AVORION_SERVICEDIR"
 	
 	# Quick check to make sure that SteamCMD is present either
 	# in steamcmd or steamcmd.sh form
 	if [[ -f "$STEAMCMD_BIN" ]] || command -v "$STEAMCMD_BIN" 2>/dev/null; then
 		_steamcmd="$STEAMCMD_BIN"
 	else 
-		_steamcmd="$(command -v steamcmd 2>/dev/null | grep -m 1 )"
+		_steamcmd="$(command -v steamcmd 2>/dev/null | head -n1 2>/dev/null)"
 		if [[ -z "$_steamcmd" ]]; then
 			die "SteamCMD definition is undefined, or invalid"
 		fi
@@ -513,7 +520,7 @@ function __perform_update () {
 
 	# Make sure that the update lock is removed following this
 	# scripts end
-	trap 'rm -rf /tmp/avorion/updatingavorion.lock;echo "Updates unlocked"' EXIT INT TERM
+	trap 'rm -rf /tmp/avorion/updatingavorion.lock;echo "Updates unlocked"; exit 0' EXIT INT TERM
 
 	# Queries the systemd bus for active avorion@ instances and saves them
 	_units="$(systemctl list-units 'avorion@*' | grep -E '^avorion@[^\s]+.service loaded active running' | awk '{print $1}')"
@@ -528,8 +535,13 @@ function __perform_update () {
 
 	# Download the latest version to: "${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	# ex: /srv/avorion/server_dir.updatefiles
+	cd "$AVORION_SERVICEDIR" || die "Failed to cd into service directory <$AVORION_SERVICEDIR>"
 	if ! sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" -n "$_steamcmd" +login anonymous +force_install_dir "$_updatedir" +app_update "$AVORION_STEAMID" validate +exit; then
 		_failed=1
+	fi
+
+	if (( _failed > 0 )) || [[ ! -f "$_updatedir"/bin/AvorionServer ]]; then
+		die "Failed to download new update"
 	fi
 
 	# Acquire the Avorion version of the new update
@@ -575,7 +587,7 @@ function __perform_update () {
 	fi
 
 	if ! (( _failed > 0 )); then
-		rm -rf "$_updatedir" >/dev/null 2&1
+		rm -rf "$_updatedir" >/dev/null 2>&1
 		exit 1
 	fi
 
@@ -789,7 +801,7 @@ function __check_screen_tmux () {
 	(( NOSCREENCHECK > 0 )) && return 1
 
 	# Die if we are running in a screen or tmux session.
-	if [[ -n "$TMUX" ]] || [[ ! "$TERM" =~ ^(screen|tmux) ]] || [[ -n "$TMUX_PANE" ]] || [[ -n "$STY" ]]; then
+	if [[ -n "$TMUX" ]] || [[ "$TERM" =~ ^(screen|tmux) ]] || [[ -n "$TMUX_PANE" ]] || [[ -n "$STY" ]]; then
 		return 0
 	fi
 
@@ -997,7 +1009,7 @@ Commands:
 		Reset the given sectors or range of sectors.
 		${_grn}${CMDNAME} resetsectors <instance> <x:y, ...>${_clr}
 		${_grn}${CMDNAME} resetsectors <instance> <x:x-y:y>${_clr}
-		${_yel}This function is a work-in-progress!
+		${_yel}This function is a work-in-progress!${_clr}
 
 	resetplayer
 		Resets the given player or players
