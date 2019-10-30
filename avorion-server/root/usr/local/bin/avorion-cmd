@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-CMDVERS='2.0-testing rev1'
+CMDVERS='2.0-testing rev2'
 CMDNAME="$(basename "$0")"
 EDATE="$(date +%s)"
 
@@ -14,9 +14,9 @@ function __check_requirements () {
 	
 	# Required version strings, prepended with the argument
 	# that will invoke them.
-	_requires[tmux]='skip'
-	_requires[bash]='--version=^GNU bash, version [0-9]{0,1}[4-9].*'
 	_requires[sed]='--version=^sed \(GNU sed\) [0-9]{0,1}[4-9].*'
+	_requires[bash]='--version=^GNU bash, version [0-9]{0,1}[4-9].*'
+	_requires[tmux]='skip'
 	_requires[mktemp]='skip'
 
 	for _prog in "${!_requires[@]}"; do
@@ -44,16 +44,12 @@ function __check_requirements () {
 function __assert_valid_execution () {
 	__check_requirements
 
-	# Die if there are no arguments passed
-	[[ $# -eq 0 ]] ||\
-		die "Usage: avorion-cmd <options> <parameters>"
-
 	# Make sure the user is part of the admin group or is root. The 
 	# regex is used here to prevent unintentionally matching groups
 	# that contain the group string but dont exactly match it. Since
 	# root should be able to do anything, we also check for id 0
 	if [[ ! "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP$) ]] && [[ "$(id -u)" != 0 ]]; then
-		die "This command can only be run by a ${AVORION_ADMIN_GRP} or root."
+		die "This command can only be run by a user with the group <${AVORION_ADMIN_GRP}> or by root."
 	fi
 }
 
@@ -98,8 +94,8 @@ function __validate_setting_conf () {
 		
 		__err="Configuration error on line ${i} of /etc/avorionsettings.conf"
 		
-		# We dont care about blank lines, so skip those
-		[[ "${__l}" =~ ^[[:space:]]*$ ]] && continue
+		# We dont care about blank lines and comments, so skip those
+		[[ "${__l}" =~ ^[[:space:]]*#*$ ]] && continue
 
 		# Ensure the line contains no invalid symbols
 		[[ "${__l}" =~ $__bad_symbols ]] &&\
@@ -454,6 +450,14 @@ function __perform_update () {
 
 	# Download the latest version to: "${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	# ex: /srv/avorion/server_dir.updatefiles
+	#
+	# NOTE: Depending on the distrobution, steamcmd may require manual intervention in order to
+	#       run this properly. This is a known issue with Debian based deb installations specifically.
+	#       To work around this, install steamcmd manually to /opt/steam per the settings file included.
+	#
+	# NOTE2: Note also that - as this command uses sudo - the /etc/sudoers.d/avorion-ds9 file MUST be
+	#        be up to date and reflectant of the settings in /etc/avorionsettings.conf in order for
+	#        this to work correctly.
 	if ! sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" -n "$_steamcmd" +login anonymous +force_install_dir "$_updatedir" +app_update "$AVORION_STEAMID" validate +exit; then
 		_failed=1
 	fi
@@ -679,7 +683,7 @@ function __show_service_instances () {
 		exit 1
 	fi
 
-	echo "${_bld}${_wht}DeepSpace 9.875 Service Instances${_clr}"
+	echo "${_bld}${_wht}Avorion Instances${_clr}"
 
 	find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' -printf '%f\n' | sort | while read -r _sock; do
 		local _instance="${_sock%%.sock*}"
@@ -698,17 +702,9 @@ function __show_service_instances () {
 	done
 }
 
-# bool __check_execution_lock (str __function)
-#	Check for our exection lockfile and prevent
-#	execution if one is found. Optionally, a string
-#	can be passed to prevent execution on a function,
-#	rather than a general lock.
-function __check_execution_lock () {
-	(( $# > 1 )) &&\
-	   die "Too many arguments passed to __check_execution_lock"
-
-}
-
+# bool __check_screen_tmux (void)
+#	Return true if we are in a screen/tmux session, otherwise
+#	return false.
 function __check_screen_tmux () {
 	# Skip this if --no-screen-enforce is passed
 	(( NOSCREENCHECK > 0 )) && return 1
@@ -722,6 +718,10 @@ function __check_screen_tmux () {
 }
 
 function main () {
+	# Die if there are no arguments passed
+	[[ $# -eq 0 ]] ||\
+		die "Usage: $CMDNAME <options> <parameters>"
+
 	__validate_setting_conf && source /etc/avorionsettings.conf
 	__assert_valid_execution
 	__set_globals
@@ -730,7 +730,7 @@ function main () {
 
 	# Check for the existence of the given strings in the positional
 	# parameter list. If they exist, remove it from said parameter
-	# list and continue execution.
+	# list and continue execution after setting the requisite vars.
 	for _arg; do
 		shift
 
@@ -941,7 +941,7 @@ _EOF_
 			exit 0
 			;;
 
-		? )
+		* )
 			printf '%s\n' "Invalid argument passed: <$1>"
 			exit 1
 			;;
@@ -985,46 +985,63 @@ function __compare_version_string () {
 	local __diff=0
 	
 	## Prevent * from breaking everything by replacing those with
-	## '?' characters. (* will expand into filenames, ? will not.
+	## '?' characters. (* will expand into filenames, ? will not.)
 	__checkstr="${__checkstr//\*/?}"
 	__basestr="${__basestr//\*/?}"
 
+	## Not the most ideal way of doing this, but it is reasonably safe
+	## given our inputs. All these are doing is turning those strings
+	## into arrays with the delimiter being the "."
 	for n in ${__checkstr//./ }; do
 		__checkstr_arr+=( "$n" )
 	done
-
 	for n in ${__basestr//./ }; do
 		__basestr_arr+=( "$n" )
 	done
-		
+	
+	## Start looping on the array contents, using the "__basestr__arr"  
+	## array as the base.
 	for i in "${!__basestr_arr[@]}"; do
 		__base="${__basestr_arr[$i]}"
 		__check="${__checkstr_arr[$i]}"
 		
+		## If one of the versions is a wildcard, then we don't need to
+		## continue past this point. Check is successful, but note the
+		## warning that is set for when verbose output is enabled.
 		if [[ "$__check" == '?' ]] || [[ "$__base" == '?' ]]; then
 			__warn=1
 			__pass=1
 			break
+
+		## If one of the strings is exmpty, we've reached the end of this
+		## version string and can stop. Check is considered successful.
 		elif [[ -z "$__check" ]] || [[ -z "$__base" ]]; then
 			__warn=2
 			__pass=1
 			break
 		fi
 		
+		## If the base version string ($2) is less than the version we are
+		## checking ($1), continue.
 		if (( __base < __check )); then
 			__diff="$(( __base - __check ))"
-			break
-			
+		
+		## If the base version string ($2) is **higher** then the version
+		## we are checking, then the check is considered a fail, and we stop.
 		elif (( __base > __check )); then
 			__pass=0
 			break
 		fi
 	done
 	
+	## Return our failure state if we didn't pass
 	if (( __pass < 1 )); then
 		return 1
 	fi
-	
+
+	## When verbose error output is enabled, we want to output the following to
+	## standard output. Note that the string refernces below are replacing '?' with '*'
+	## Also note that the following only outputs on a successful run.
 	if (( __do_warn > 0 )); then
 		case "$__warn" in
 			1 ) printf '\t%s\n' \
@@ -1038,7 +1055,7 @@ function __compare_version_string () {
 	
 		if (( __diff > 0 )); then
 			printf '\t%s\n' \
-					"Passing point release is $__diff higher than current update: <${__checkstr//\?/*}>"
+				"Passing point release is $__diff version$(plural "$__diff") higher than current update: <${__checkstr//\?/*}>"
 		fi    
 	fi
 }
