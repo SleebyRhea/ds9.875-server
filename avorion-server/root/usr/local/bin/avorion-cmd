@@ -3,6 +3,7 @@
 CMDVERS='2.0-testing rev2'
 CMDNAME="$(basename "$0")"
 EDATE="$(date +%s)"
+
 # bool __check_requirements <void>
 #	Checks required software versions and exits if either
 #	the required software is not present in $PATH or if it
@@ -1138,7 +1139,7 @@ function plural () {
 		return 0
 	fi
 
-	die "Function \`plural\` recieved <$1> rather than an int"
+	die "Function <plural> recieved <$1> rather than an int"
 }
 
 main "$@"
