@@ -1,0 +1,9 @@
+## Ds9Admin Group Permitted Commands
+Cmdid_Alias AVORION_DS9SERVER_CMDS = /bin/systemctl start avorion@ds9server, /bin/systemctl stop avorion@ds9server, /bin/systemctl status avorion@ds9server
+Cmdid_Alias STEAM_COMMANDS = /opt/steam/steamcmd.sh +login anonymous +force_install_dir /srv/avorion/server_files.updatefiles +app_update 565060 validate +exit
+
+## Allows a user assigned to the dsnineadm group to run the above commands without using
+## sudo without needing a password.
+%ds9nineadm ALL=(ALL) NOPASSWD: AVORION_DS9SERVER_CMDS
+%ds9nineadm ALL=(ALL) NOPASSWD: STEAM_COMMANDS
+
