@@ -3,84 +3,9 @@
 CMDVERS='2.0-testing rev2'
 CMDNAME="$(basename "$0")"
 EDATE="$(date +%s)"
-
-# bool __check_requirements <void>
-#	Checks required software versions and exits if either
-#	the required software is not present in $PATH or if it
-#	does not meet the minimum version requirements.
-function __check_requirements () {
-	local -A _requires
-	local _prog _arg _string
-	
-	# Required version strings, prepended with the argument
-	# that will invoke them.
-	_requires[sed]='--version=^sed \(GNU sed\) [0-9]{0,1}[4-9].*'
-	_requires[bash]='--version=^GNU bash, version [0-9]{0,1}[4-9].*'
-	_requires[tmux]='skip'
-	_requires[mktemp]='skip'
-
-	for _prog in "${!_requires[@]}"; do
-		_arg="${_requires["$_prog"]%%=*}"
-		_string="${_requires["$_prog"]##*=}"
-
-		command -v "$_prog" >/dev/null 2>&1 ||\
-			die "${_prog} is required but is either not installed, or not in the execution PATH"
-
-		[[ "${_requires[$_prog]}" == 'skip' ]] &&\
-			continue
-
-		[[ "$("$_prog" "$_arg")" =~ $_string ]] ||\
-			die "${_prog} doesnt meet the minimum version requirements"
-	done
-}
-
-# int __validate_process_exec <ARGV>
-#	Run various pre-checks prior to running the main
-#	script body to ensure that the process execution
-#	is both valid, and that all of the required pkgs
-#	have been installed. If any of these pre-checks
-#	fail, exit the script with error code 1 and give
-#	an explanation.
-function __assert_valid_execution () {
-	__check_requirements
-
-	# Make sure the user is part of the admin group or is root. The 
-	# regex is used here to prevent unintentionally matching groups
-	# that contain the group string but dont exactly match it. Since
-	# root should be able to do anything, we also check for id 0
-	if [[ ! "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP$) ]] && [[ "$(id -u)" != 0 ]]; then
-		die "This command can only be run by a user with the group <${AVORION_ADMIN_GRP}> or by root."
-	fi
-}
-
-# bool __assert_valid_user_input <string>
-#	Check the string given for bash symbols
-#	and return error if any are found.
-function __assert_valid_user_input () {
-	[[ "$1" =~ [/\\\$\&\@\#\`\~\=\+\{\}\[\]\|\'\"] ]] &&\
-		return 1 ||\
-		return 0
-}
-
-# int __validate_setting_conf <void>
-#	Run validation checks on the configuration file.
-#	This function checks all of the non-blank lines
-#	present in the conf file and ensures that they
-#	are both valid configs, and that the settings
-#	provided are valid.
-function __validate_setting_conf () {
-	[[ -f /etc/avorionsettings.conf ]] ||\
-		die "Avorion configuration file not found"
-
-	local -A __conf_vars
-	local __bad_symbols __err
-	__bad_symbols="[\\&^s\(\)%\[\]\#@!<>\'\",;:\{\}]"
-	__conf_vars[AVORION_ADMIN_GRP]='^[a-z][a-z]*$'
-	__conf_vars[AVORION_USER]='^[a-z][a-z]*$'
-	__conf_vars[AVORION_SERVICEDIR]='^/[a-zA-Z0-9_\-][a-zA-Z0-9_\-\/]*$'
-	__conf_vars[AVORION_BINDIR]='^[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
+	__conf_vars[AVORION_BAKDIR]='^\/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
 	__conf_vars[AVORION_STEAMID]='^[0-9][0-9]*$'
-	__conf_vars[STEAMCMD_BIN]='^(/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*[a-zA-Z0-9_\-]|)$'
+	__conf_vars[STEAMCMD_BIN]='^(/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/\.]*[a-zA-Z0-9]|steamcmd)$'
 
 	# Leaving this here for now, but this used to check for invalid options
 	# being set in the configuration file
@@ -163,7 +88,7 @@ function __set_globals () {
 	declare NOSCREENCHECK=0
 	declare _tmuxsess _tmuxsock _instdir
 	
-	readonly _clr="$(tput sgr0 2>/dev/null)a"		# prevent error spam when there is no $TERM
+	readonly _clr="$(tput sgr0 2>/dev/null)"		# prevent error spam when there is no $TERM
 	readonly _bld="$(tput bold 2>/dev/null)"		# such as when run from systemd unit
 	readonly _red="$(tput setaf 1 2>/dev/null)"
 	readonly _grn="$(tput setaf 2 2>/dev/null)"
@@ -178,7 +103,7 @@ function __set_globals () {
 	if [[ -z "$TMP_FILE" ]]; then
 		echo "Cannot generate tmpfile! Check tmp usage."
 		exit 1
-	elif [[ -w "$TMP_FILE" ]]; then
+	elif [[ ! -w "$TMP_FILE" ]]; then
 		echo "Cannot write to tmpfile <$TMP_FILE>. Check tmp permissions."
 		exit 1
 	fi
@@ -412,13 +337,18 @@ function __perform_update () {
 	_updatedir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	_currentdir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}"
 	_failed=0
+
+	## Overwrite default environment to fix sudo+steamcmd stupidity
+	USER="$AVORION_USER"
+	GROUP="$AVORION_ADMIN_GRP"
+	HOME="$AVORION_SERVICEDIR"
 	
 	# Quick check to make sure that SteamCMD is present either
 	# in steamcmd or steamcmd.sh form
 	if [[ -f "$STEAMCMD_BIN" ]] || command -v "$STEAMCMD_BIN" 2>/dev/null; then
 		_steamcmd="$STEAMCMD_BIN"
 	else 
-		_steamcmd="$(command -v steamcmd 2>/dev/null | grep -m 1 )"
+		_steamcmd="$(command -v steamcmd 2>/dev/null | head -n1 2>/dev/null)"
 		if [[ -z "$_steamcmd" ]]; then
 			die "SteamCMD definition is undefined, or invalid"
 		fi
@@ -435,7 +365,7 @@ function __perform_update () {
 
 	# Make sure that the update lock is removed following this
 	# scripts end
-	trap 'rm -rf /tmp/avorion/updatingavorion.lock;echo "Updates unlocked"' EXIT INT TERM
+	trap 'rm -rf /tmp/avorion/updatingavorion.lock;echo "Updates unlocked"; exit 0' EXIT INT TERM
 
 	# Queries the systemd bus for active avorion@ instances and saves them
 	_units="$(systemctl list-units 'avorion@*' | grep -E '^avorion@[^\s]+.service loaded active running' | awk '{print $1}')"
@@ -458,8 +388,13 @@ function __perform_update () {
 	# NOTE2: Note also that - as this command uses sudo - the /etc/sudoers.d/avorion-ds9 file MUST be
 	#        be up to date and reflectant of the settings in /etc/avorionsettings.conf in order for
 	#        this to work correctly.
+	cd "$AVORION_SERVICEDIR" || die "Failed to cd into service directory <$AVORION_SERVICEDIR>"
 	if ! sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" -n "$_steamcmd" +login anonymous +force_install_dir "$_updatedir" +app_update "$AVORION_STEAMID" validate +exit; then
 		_failed=1
+	fi
+
+	if (( _failed > 0 )) || [[ ! -f "$_updatedir"/bin/AvorionServer ]]; then
+		die "Failed to download new update"
 	fi
 
 	# Acquire the Avorion version of the new update
@@ -504,7 +439,7 @@ function __perform_update () {
 	fi
 
 	if ! (( _failed > 0 )); then
-		rm -rf "$_updatedir" >/dev/null 2&1
+		rm -rf "$_updatedir" >/dev/null 2>&1
 		exit 1
 	fi
 
@@ -710,7 +645,7 @@ function __check_screen_tmux () {
 	(( NOSCREENCHECK > 0 )) && return 1
 
 	# Die if we are running in a screen or tmux session.
-	if [[ -n "$TMUX" ]] || [[ ! "$TERM" =~ ^(screen|tmux) ]] || [[ -n "$TMUX_PANE" ]] || [[ -n "$STY" ]]; then
+	if [[ -n "$TMUX" ]] || [[ "$TERM" =~ ^(screen|tmux) ]] || [[ -n "$TMUX_PANE" ]] || [[ -n "$STY" ]]; then
 		return 0
 	fi
 
@@ -922,7 +857,7 @@ Commands:
 		Reset the given sectors or range of sectors.
 		${_grn}${CMDNAME} resetsectors <instance> <x:y, ...>${_clr}
 		${_grn}${CMDNAME} resetsectors <instance> <x:x-y:y>${_clr}
-		${_yel}This function is a work-in-progress!
+		${_yel}This function is a work-in-progress!${_clr}
 
 	backup
 		Take a backup of the given instance.
