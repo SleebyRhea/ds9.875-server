@@ -4,77 +4,6 @@ CMDVERS='2.0-testing rev1'
 CMDNAME="$(basename "$0")"
 EDATE="$(date +%s)"
 
-# void say <string, ...>
-#	Ouput the strings passed to stdout and return
-function say () {
-	for _l; do printf '%s\n' "${_l}"; done
-	return 0
-} 
-
-# bool dbssay <string, ...>
-#	If the script is currently in debug mode, `say`
-#	the arguments passed to this function. Otherwise,
-#	return code 1
-function dbgsay () {
-	[[ "${VERBOSE}" == 1 ]] &&\
-		say "$@" ||\
-		return 1
-}
-
-# int die <options> <string>
-#	Output the strings passed to stdout then exit
-#	with status code 1 (or the code given with -c)
-function die () {
-	local _code=1
-	if [[ "$1" == '-c' ]] && [[ "$2" =~ ^[0-9][0-9]*$ ]]; then
-		_code="$2"
-		shift; shift
-	fi
-
-	say "Error: $1"
-	exit "$_code"
-}
-
-# bool yesno <string>
-#	Get a yes or no response from the user and
-#	return accordingly (0 for yes, 1 for no).
-#	If a string is passed, provide the user with
-#	that string as a prompt.
-function yesno () {
-	local _prompt _answer
-	_prompt="${1-Yes/No}"
-
-	while true; do
-		read -r _answer -p "[${_prompt}]> "
-		case "${_answer}" in
-			[yY][eE][sS] | [yY] )
-				return 0
-				;;
-			[nN][oO] | [nN] )
-				return 1
-				;;
-			?)
-				say "Please enter yes or no."
-				;;
-		esac
-	done
-}
-
-# int plural <int>
-#	Given an int, print an s to the caller if said
-#	int does not equal 1
-function plural () {
-	if [[ "$1" =~ ^[0-9]+$ ]]; then
-		if ! (( $1 != 1 )); then
-			printf '%s' 's'
-			return 0
-		fi
-		return 0
-	fi
-
-	die "Function \`plural\` recieved <$1> rather than an int"
-}
-
 # bool __check_requirements <void>
 #	Checks required software versions and exits if either
 #	the required software is not present in $PATH or if it
@@ -315,7 +244,6 @@ function __restart_avorion_instance () {
 
 function __check_incompatible_modlist () {
 	declare -A __mod_data __modded_insts
-	declare -a __failed_instances
 	local __avorion_version_string __instdir __modlist __pass __inst_comma __warn
 	local __curmaxverstring __newmaxverstring __curminverstring __newminverstring
 	local __minstring __maxstring __verbose_version_checks __fail_count
@@ -454,9 +382,7 @@ function __check_incompatible_modlist () {
 			printf '%s\n' "Fail"
 			(( __fail_count++ ))
 			for __inst in ${__inst_list//,/ }; do
-				if ! grep -qE "(^$__inst | $__inst | $__inst$)" <<< "$__failed_instances" >/dev/null 2>&1; then
-					__modded_insts[$__inst]=FAIL
-				fi
+				__modded_insts[$__inst]=FAIL
 			done
 		fi
 
@@ -552,7 +478,7 @@ function __perform_update () {
 	fi
 
 	# Attempt to move the updated data to its final destination. Upon failure,
-	# attempt to reevert, and exit
+	# attempt to revert, and exit
 	if ! mv "$_updatedir" "$_currentdir"; then
 		say "Unable to move update date to ${_currentdir}!"
 		if [[ -d "${_currentdir}.updatebak" ]]; then
@@ -569,7 +495,6 @@ function __perform_update () {
 			__inst="${_inst%%.service}"
 			if ! __start_avorion_instance "${_inst}"; then
 				_failed=1
-				
 			fi
 		done <<< "${_units}"
 	fi
@@ -999,10 +924,6 @@ Commands:
 		${_grn}${CMDNAME} resetsectors <instance> <x:x-y:y>${_clr}
 		${_yel}This function is a work-in-progress!
 
-	resetplayer
-		Resets the given player or players
-		${_yel}NOTICE: Not currently implemented${_clr}
-
 	backup
 		Take a backup of the given instance.
 		${_grn}${CMDNAME} backup <instance>${_clr}
@@ -1057,7 +978,7 @@ function __compare_version_string () {
 	
 	local -a __checkstr_arr __basestr_arr
 	local __check __base
-	local __checkstr="$2"
+	local __checkstr="$1"
 	local __basestr="$2"
 	local __pass=1
 	local __warn=0
@@ -1120,6 +1041,77 @@ function __compare_version_string () {
 					"Passing point release is $__diff higher than current update: <${__checkstr//\?/*}>"
 		fi    
 	fi
+}
+
+# void say <string, ...>
+#	Ouput the strings passed to stdout and return
+function say () {
+	for _l; do printf '%s\n' "${_l}"; done
+	return 0
+} 
+
+# bool dbssay <string, ...>
+#	If the script is currently in debug mode, `say`
+#	the arguments passed to this function. Otherwise,
+#	return code 1
+function dbgsay () {
+	[[ "${VERBOSE}" == 1 ]] &&\
+		say "$@" ||\
+		return 1
+}
+
+# int die <options> <string>
+#	Output the strings passed to stdout then exit
+#	with status code 1 (or the code given with -c)
+function die () {
+	local _code=1
+	if [[ "$1" == '-c' ]] && [[ "$2" =~ ^[0-9][0-9]*$ ]]; then
+		_code="$2"
+		shift; shift
+	fi
+
+	say "Error: $1"
+	exit "$_code"
+}
+
+# bool yesno <string>
+#	Get a yes or no response from the user and
+#	return accordingly (0 for yes, 1 for no).
+#	If a string is passed, provide the user with
+#	that string as a prompt.
+function yesno () {
+	local _prompt _answer
+	_prompt="${1-Yes/No}"
+
+	while true; do
+		read -r _answer -p "[${_prompt}]> "
+		case "${_answer}" in
+			[yY][eE][sS] | [yY] )
+				return 0
+				;;
+			[nN][oO] | [nN] )
+				return 1
+				;;
+			?)
+				say "Please enter yes or no."
+				;;
+		esac
+	done
+}
+
+# int plural <int>
+#	Given an int, print an s to the caller if said
+#	int does not equal 1
+function plural () {
+	if [[ "$1" =~ ^[0-9]+$ ]]; then
+		if ! (( $1 != 1 )); then
+			printf '%s' 's'
+			return 0
+		fi
+		return 0
+	fi
+
+	die "Function \`plural\` recieved <$1> rather than an int"
 }
 
 main "$@"
