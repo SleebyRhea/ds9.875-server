@@ -219,13 +219,9 @@ function __set_tmux_instance () {
 	_tmuxsess="${_tmuxsess//[ _]/\-}"
 	_tmuxsess="${_tmuxsess//[^a-zA-Z0-9\-]/}"
 
-	# Catch references to steam and force set the instance to steamcmd
-	if [[ "$_tmuxsess" =~ ^[sS][tT][eE][aA][mM] ]]; then
-		_tmuxsock="${AVORION_SERVICEDIR}/sockets/steamcmd.sock"
-
 	# If the instance is either an Avorion instance or a valid service
 	# file, then use that and set the tmux session
-	elif systemctl status avorion@"$_tmuxsess" >/dev/null 2>&1 || systemctl status "${_tmuxsess}" >/dev/null 2>&1; then
+	if systemctl status avorion@"$_tmuxsess" >/dev/null 2>&1 || systemctl status "${_tmuxsess}" >/dev/null 2>&1; then
 		_tmuxsock="${AVORION_SERVICEDIR}/sockets/${_tmuxsess}.sock"
 
 	else
