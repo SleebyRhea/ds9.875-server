@@ -7,7 +7,6 @@ PartOf=avorionservers.target
 Type=forking
 User=avorion
 Group=dsnineadm
-PIDFile=/srv/avorion/%1/instance.pid
 WorkingDirectory=/srv/avorion
 ProtectSystem=full
 PrivateUsers=true
@@ -26,4 +25,4 @@ ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock send-keys -t avorion-%i '
 ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock send-keys -t avorion-%i '/stop' ENTER
 
 Restart=always
-RestartSec=10s
+RestartSec=30s
