@@ -3,6 +3,10 @@
 CMDVERS='2.0-testing rev2'
 CMDNAME="$(basename "$0")"
 EDATE="$(date +%s)"
+VERBOSE=0
+NOSCREENCHECK=0
+FORCE=0
+CRON=0
 
 # bool __check_requirements <void>
 #	Checks required software versions and exits if either
@@ -138,18 +142,35 @@ function __validate_setting_conf () {
 #	is a valid (and active) tmux controlled instance
 #	and set the tmux socket and session globals
 function __set_tmux_instance () {
-	[[ -z "$1" ]] || return 1
+	local __skip_active=0
+	
+	for _arg; do
+		shift
+		if [[ "$_arg" == '--skip-active-check' ]]; then
+			__skip_active=1
+			continue
+		fi
+
+		set -- "$@" "$_arg"
+	done
+
+	## Die if there are no more arguments left
+	(( $# > 0 )) || return 1
 
 	# Strip bad chars from user input
 	_tmuxsess="$1"
 	_tmuxsess="${_tmuxsess//[ _]/\-}"
 	_tmuxsess="${_tmuxsess//[^a-zA-Z0-9\-]/}"
 
+	if (( __skip_active > 0 )); then
+		return 0
+	fi
+
 	# If the instance is either an Avorion instance or a valid service
 	# file, then use that and set the tmux session
-	if systemctl status avorion@"$_tmuxsess" >/dev/null 2>&1 || systemctl status "${_tmuxsess}" >/dev/null 2>&1; then
+	if systemctl status --no-pager avorion@"$_tmuxsess" >/dev/null 2>&1; then
 		_tmuxsock="${AVORION_SERVICEDIR}/sockets/${_tmuxsess}.sock"
-
+		return 0
 	else
 		echo "$_tmuxsess is not a valid instance"
 		exit 1
@@ -160,8 +181,6 @@ function __set_tmux_instance () {
 #	Set various global values, and declare
 #	other unset globals
 function __set_globals () {
-	declare VERBOSE=0
-	declare NOSCREENCHECK=0
 	declare _tmuxsess _tmuxsock _instdir
 	
 	readonly _clr="$(tput sgr0 2>/dev/null)"		# prevent error spam when there is no $TERM
@@ -186,15 +205,25 @@ function __set_globals () {
 }
 
 function __start_avorion_instance () {
-	printf 'Attempting to starting <%s....n' "${__inst}"
-	if ! systemctl status avorion@"$1" >/dev/null 2<&1; then
-		if sudo -n systemctl start avorion@"$1" >/dev/null 2>&1; then
-			printf "${_grn}%s${_clr}" 'Success'
-			return 0
-		fi
+	local _prompt="Are you certain you wish to start ${_grn}$1${_clr}?"
+	local _sess="$1"
+	
+	## Strip avorion@ and .service for sanity
+	_sess="${_sess%%.service}"
+	_sess="${_sess##avorion@}"
+
+	if ! systemctl status --no-pager avorion@"$_sess".service >/dev/null 2<&1; then
+		if (( FORCE > 0)) || (( CRON > 0 )) || yesno "$_prompt"; then
+			(( CRON < 1 )) && printf 'Starting <%s>...' "$_sess"
+			
+			if sudo -n systemctl start avorion@"$_sess" >/dev/null 2>&1; then
+				printf "${_grn}%s${_clr}\n" 'Success'
+				return 0
+			fi
 		
-		printf "${_red}%s${_clr}" 'Fail'
-		return 1
+			printf "${_red}%s${_clr}\n" 'Fail'
+			return 1
+		fi
 	fi
 
 	return 0
@@ -204,30 +233,42 @@ function __stop_avorion_instance () {
 	local _time=0
 	local _pid
 
-	if ! systemctl status avorion@"$1".service; then
+	if ! systemctl status --no-pager avorion@"$1".service >/dev/null 2>&1; then
 		return 0
 	fi
 
 	## Get the operating PID for that intance
-	_pid="$(cat "$AVORION_SERVICEDIR/$1/instance.pid" | tr -d '\n')"
+	_pid="$(systemctl show --property MainPID --value avorion@"$1".service | tr -d '\n')"
 
-	printf 'Stopping <%s> instance, this could take a while' "$1"
+	if [[ ! "$_pid" =~ ^[0-9][0-9]*$ ]]; then
+		echo "Bad pid: <$_pid>"
+		exit 1
+	fi
+
+	dbgsay "Using pid: $_pid"
+
+	printf 'Stopping <%s> instance, this could take a while...' "$1"
 	"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/${1}.sock" \
-		send-keys ENTER "/say Stopping Avorion..." ENTER "/save" ENTER "/stop"
+		send-keys ENTER "/say Stopping Avorion..." ENTER "/save" ENTER "/stop" ENTER \;
 
-	## Continue looping while the /proc/$_pid/exe points to the correct executable
-	while [[ -d "/proc/$_pid" ]] && grep -q " $AVORION_BINDIR/bin/AvorionServer --galaxy-name ${1} " "/proc/$_pid/cmdline" >/dev/null 2>&1; do
+	## Continue looping while the /proc/$_pid/cmdline points to the correct executable
+	while [[ -d "/proc/$_pid" ]] && grep -q "$AVORION_SERVICEDIR/$AVORION_BINDIR/bin/AvorionServer --galaxy-name ${1} " "/proc/$_pid/cmdline" >/dev/null 2>&1; do
 		if ((_time < 1000 )); then
 			printf '.'
+			sleep 1
 		else
 			printf '\nInstance <%s> seems to be hanging, forcefully shutting down. This make take a moment.' "$1"
 			if ! sudo -n systemctl stop avorion@"$1" >/dev/null 2>&1; then
-				printf '%s' "Unable to stop <$1>. Killing."
+				printf '%s\n' "Unable to stop <$1>. Killing."
 				sudo -n systemctl kill avorion@"$1" >/dev/null 2>&1
+				return 1
 			fi
 		fi
 		((_time++))
 	done
+
+	sudo -n systemctl stop avorion@"$1" >/dev/null 2>&1
+	printf "Done.\n"
 
 	return 0
 }
@@ -244,23 +285,42 @@ function __check_incompatible_modlist () {
 	local __avorion_version_string __instdir __modlist __pass __inst_comma __warn
 	local __curmaxverstring __newmaxverstring __curminverstring __newminverstring
 	local __minstring __maxstring __verbose_version_checks __fail_count
+	local __verbose_version_checks
+
+	__warn=''
+	__avorion_version_string="$1"
+	__verbose_version_checks=0
 
 	# Get the list of directories that contain a modded
 	# installation.
 	while read -r __instdir; do
+		dbgsay "Working on <$__instdir>"
 		# do not permit execution to continue on directories
 		# that contain special characters. 
-		[[ "$__instdir" =~ [^a-zA-Z0-9] ]] &&\
+		if [[ "$__instdir" =~ [^a-zA-Z0-9\/] ]]; then
+			dbgsay "Found bad dir: <$__instdir>"
 			continue
+		fi
 
 		## No point in attempting to operate on instances
 		## without any mods downloaded.
-		[[ -d "${__instdir}/workshop/content/" ]] ||\
+		if [[ ! -d "${__instdir}/workshop/content/445220/" ]]; then
+			dbgsay "No workshop content directory found <${__instdir}/workshop/content/445220/>"
 			continue
+		fi
 
 		# Save only the instance name in the final array
 		__modded_insts["$( basename "$__instdir" )"]=PASS
 	done <<< "$( find "$AVORION_SERVICEDIR" -maxdepth 2 -type f -name modconfig.lua -printf '%h\n' 2>/dev/null )"
+
+	for _inst in "${!__modded_insts[@]}"; do
+		echo "Found: <$_inst>"
+	done
+
+	if (( ${#__modded_insts[@]} < 1 )); then
+		echo 'No modded instances found.'
+		return 0
+	fi
 
 	printf "Gathering data for version checking..."
 
@@ -275,6 +335,10 @@ function __check_incompatible_modlist () {
 		)"
 
 		while read -r __modid; do
+			if [[ ! -f "${AVORION_SERVICEDIR}/${__inst}/workshop/content/445220/${__modid}/modinfo.lua" ]]; then
+				continue
+			fi
+
 			__newmaxverstring=''; __curmaxverstring=''
 			__newminverstring=''; __curminverstring=''
 			__inst_comma=','
@@ -302,7 +366,7 @@ function __check_incompatible_modlist () {
 			## Get the max version for the operative mod.
 			## TODO: Refine this into either a proper sed or awk parser.
 			__newmaxverstring="$(
-				grep max "${__inst}/workshop/content/${AVORION_STEAMID}/${__modid}/modinfo.lua" |\
+				grep max "${AVORION_SERVICEDIR}/${__inst}/workshop/content/445220/${__modid}/modinfo.lua" |\
 				grep -v '^[[:space:]]*\-\-' |\
 				grep 'id[[:space:]]*=[[:space:]]*"Avorion"' |\
 				grep -o 'max[[:space:]]*=[[:space:]]"[^\"]*"' |\
@@ -312,7 +376,7 @@ function __check_incompatible_modlist () {
 			## Get the min version for the operative mod
 			## TODO: Refine this into either a proper sed or awk parser.
 			__newminverstring="$(
-				grep min "${__inst}/workshop/content/${AVORION_STEAMID}/${__modid}/modinfo.lua" |\
+				grep min "${AVORION_SERVICEDIR}/${__inst}/workshop/content/445220/${__modid}/modinfo.lua" |\
 				grep -v '^[[:space:]]*\-\-' |\
 				grep 'id[[:space:]]*=[[:space:]]*"Avorion"' |\
 				grep -o 'min[[:space:]]*=[[:space:]]"[^\"]*"' |\
@@ -335,7 +399,7 @@ function __check_incompatible_modlist () {
 		done <<< "$__modlist"
 	done
 	
-	say Ready.
+	echo "Ready"
 
 	if yesno "Would you like verbose output?"; then
 		__verbose_version_checks=1
@@ -343,57 +407,59 @@ function __check_incompatible_modlist () {
 	fi
 
 	__fail_count=0
-
+	
 	for __modid in "${!__mod_data[@]}"; do
 		__pass=1
 
-		(( __verbose_version_checks > 0 )) &&\
-		   	printf 'Checking Workshop Mod <%s>: ' "$__modid"
+		printf '' >"$TMP_FILE"
 
-		if [[ "${__mod_data["$__modid"]}" =~ ^([^:]*):([^:]*):([^:]*)$ ]]; then
+		printf 'Checking Workshop Mod <%s>: ' "$__modid"
+
+		if [[ ! "${__mod_data["$__modid"]}" =~ ^([^:]*):([^:]*):([^:]*)$ ]]; then
 			(( __fail_count++ ))
-			say "Error: Bad mod data string: <${__mod_data["$__modid"]}>"
+			printf "${_red}ERROR (SKIPPING)${_clr}\n\tBad mod data string: <%s>" "${__mod_data["$__modid"]}"
 			continue
 		fi
 
 		__maxstring="${BASH_REMATCH[1]}"
 		__minstring="${BASH_REMATCH[2]}"
 		__inst_list="${BASH_REMATCH[3]}"
-		
-		## Make sure our tmpfile is empty
-		echo "" > "$TMP_FILE"
 
 		if [[ -n "$__maxstring" ]]; then
-			__compare_version_string "$__warn" "$__maxstring" "$__avorion_version_string" >> "$TMP_FILE" ||\
+			if ! __compare_version_string "$__maxstring" "$__avorion_version_string" $__warn >>"$TMP_FILE"; then
+				echo "Mod max version <$__maxstring> is lower than <$__avorion_version_string>" >> "$TMP_FILE"
 				__pass=0
+			fi
 		fi
 
-		printf '\n' >> "$TMP_FILE"
-
 		if [[ -n "$__minstring" ]]; then
-			__compare_version_string "$__warn" "$__avorion_version_string" "$__minstring" >> "$TMP_FILE" ||\
+			if ! __compare_version_string "$__avorion_version_string" "$__minstring" $__warn >>"$TMP_FILE"; then
+				echo "Mod min version <$__minstring> is higher than <$__avorion_version_string>" >> "$TMP_FILE"
 				__pass=0
+			fi
 		fi
 
 		if (( __pass < 1 )); then
-			printf '%s\n' "Fail"
+			printf "${_red}%s${_clr}\n" "FAIL" 
 			(( __fail_count++ ))
 			for __inst in ${__inst_list//,/ }; do
 				__modded_insts[$__inst]=FAIL
+				printf '\t%s\n' "${AVORION_SERVICEDIR}/${_inst}/workshop/content/445220/${__modid}"
 			done
+		else
+			printf "${_grn}%s${_clr}\n" 'PASS'
 		fi
 
-		if (( __verbose_version_checks > 0 )); then
-			sed 's,.*,\t&,' "$TMP_FILE"
-		fi
+		## If our temp file isn't 0 bytes, output it
+		(( $(wc -c "$TMP_FILE" | cut -d' ' -f 1) > 0 )) &&  sed 's,.*,\t&,' "$TMP_FILE"
 	done
 
-	printf 'Complete, %s/%s passed version checks. Final instance status:' \
+	printf '\nComplete, %s/%s passed version checks. Final instance status:\n' \
 		"$(( ${#__mod_data[@]} - __fail_count ))" "${#__mod_data[@]}"
 
 	if (( __fail_count > 0 )); then
 		for __inst in "${!__modded_insts[@]}"; do
-			printf '\t%s:\t%s\n' "$__inst" "${__modded_insts["$__inst"]}"
+			printf '\t%s: %s\n' "$__inst" "${__modded_insts["$__inst"]}"
 		done
 	fi
 
@@ -418,6 +484,11 @@ function __perform_update () {
 	USER="$AVORION_USER"
 	GROUP="$AVORION_ADMIN_GRP"
 	HOME="$AVORION_SERVICEDIR"
+
+	## Prevent instance control functions from doing validation
+	## since we will be operating on instances that have already
+	## gone through those in the first place.
+	FORCE=1
 	
 	# Quick check to make sure that SteamCMD is present either
 	# in steamcmd or steamcmd.sh form
@@ -430,26 +501,34 @@ function __perform_update () {
 		fi
 	fi
 
+	if [[ ! -d /tmp/avorion ]]; then
+		sudo -n -u avorion -g dsnineadm mkdir /tmp/avorion ||\
+			die "Unable to create tmp directory"
+	fi
+
 	# Die if there is already an update running.
 	if [[ -f "/tmp/avorion/updatingavorion.lock" ]]; then
 		die "Update process already running, or a stale lock is present (/tmp/avorion/updatingavorion.lock)."
 	fi
 
-	touch /tmp/updatingavorion.lock >/dev/null 2>&1 ||\
+	sudo -n -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" touch /tmp/avorion/updatingavorion.lock >/dev/null 2>&1 ||\
 		die "Unable to create avorion lockfile! Check /tmp usage." &&\
 		echo "Updates locked."
 
 	# Make sure that the update lock is removed following this
 	# scripts end
-	trap 'rm -rf /tmp/avorion/updatingavorion.lock;echo "Updates unlocked"; exit 0' EXIT INT TERM
+	trap 'sudo -n -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" rm -rf /tmp/avorion/updatingavorion.lock;echo "Updates unlocked"; exit 0' EXIT INT TERM
 
 	# Queries the systemd bus for active avorion@ instances and saves them
-	_units="$(systemctl list-units 'avorion@*' | grep -E '^avorion@[^\s]+.service loaded active running' | awk '{print $1}')"
+	_units="$(systemctl list-units 'avorion@*' | grep '^[[:space:]]*avorion@[^[:space:]][^[:space:]]*.service[[:space:]][[:space:]]*loaded[[:space:]][[:space:]]*active[[:space:]][[:space:]]*running' | awk '{print $1}')"
 	
+	dbgsay "Active instances: $_units"
 	# If there were any active instances, stop them.
 	if [[ -n "${_units}" ]]; then
 		while read -r _inst; do
-			_inst="${_inst%%.service}" #remove trailing .service
+			_inst="${_inst%%.service}"
+			_inst="${_inst##avorion@}"
+			echo "Pausing <$_inst>"
 			__stop_avorion_instance "${__inst}"
 		done <<< "${_units}"
 	fi
@@ -464,18 +543,23 @@ function __perform_update () {
 	# NOTE2: Note also that - as this command uses sudo - the /etc/sudoers.d/avorion-ds9 file MUST be
 	#        be up to date and reflectant of the settings in /etc/avorionsettings.conf in order for
 	#        this to work correctly.
+	
 	cd "$AVORION_SERVICEDIR" || die "Failed to cd into service directory <$AVORION_SERVICEDIR>"
 	if ! sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" -n "$_steamcmd" +login anonymous +force_install_dir "$_updatedir" +app_update "$AVORION_STEAMID" validate +exit; then
 		_failed=1
 	fi
 
 	if (( _failed > 0 )) || [[ ! -f "$_updatedir"/bin/AvorionServer ]]; then
+		if [[ -d "$_updatedir" ]]; then
+			rm -rf "$_updatedir" >/dev/null; 2>&1
+		fi
 		die "Failed to download new update"
 	fi
 
 	# Acquire the Avorion version of the new update
-	__newversion="$( "$_updatedir"/bin/AvorionServer --version | tr -dc '0-9.\*')"
+	__newversion="$( "$_updatedir"/bin/AvorionServer --version | tr -dc '[0-9.\*]')"
 
+	echo
 	if yesno "Would you like to check for incompatible mods?"; then
 		if ! __check_incompatible_modlist "$__newversion"; then
 			if ! yesno "Incompatible mods found, would you still like to proceed?"; then
@@ -486,18 +570,19 @@ function __perform_update () {
 		fi
 	fi
 
+	echo
 	# If there is prior server data, move that to a backup, just in case.
 	if [[ -d "$_currentdir" ]]; then
-		mv "$_currentdir" "${_currentdir}.updatebak" ||\
+		mv "$_currentdir" "${_currentdir}.updatebak-${EDATE}" ||\
 			die "Unable to migrate old server installation!"
 	fi
 
 	# Attempt to move the updated data to its final destination. Upon failure,
 	# attempt to revert, and exit
 	if ! mv "$_updatedir" "$_currentdir"; then
-		say "Unable to move update date to ${_currentdir}!"
-		if [[ -d "${_currentdir}.updatebak" ]]; then
-			mv "${_currentdir}.updatebak" "${_currentdir}" ||\
+		say "Unable to move update data to ${_currentdir}!"
+		if [[ -d "${_currentdir}.updatebak-${EDATE}" ]]; then
+			mv "${_currentdir}.updatebak-${EDATE}" "${_currentdir}" ||\
 				say "Failed to revert changes to ${_currentdir}!"	
 		fi
 		
@@ -507,15 +592,21 @@ function __perform_update () {
 	# If any instances were up prior to the update, re-start them
 	if [[ -n "${_units}" ]]; then
 		while read -r _inst; do
-			__inst="${_inst%%.service}"
+			_inst="${_inst%%.service}"
+			_inst="${_inst##avorion@}"
+			printf "Restarting <$_inst>..."
 			if ! __start_avorion_instance "${_inst}"; then
-				_failed=1
+				(( _failed++ ))
+				printf "${_red}FAILED${_clr}\n"
+				continue
 			fi
+
+			printf "${_grn}SUCCESS${_clr}\n"
 		done <<< "${_units}"
 	fi
 
-	if ! (( _failed > 0 )); then
-		rm -rf "$_updatedir" >/dev/null 2>&1
+	if (( _failed > 0 )); then
+		echo "$_failed instance$(plural "$_failed") failed to start!"
 		exit 1
 	fi
 
@@ -632,7 +723,7 @@ function __perform_config_edits () {
 	local __instance="$1"
 	local __file="$2"
 	local __inst_file="${AVORION_SERVICEDIR}/${__instance}/${__file}"
-	local __temp_file="/tmp/avorion-cmd/${__instance}/${__file}.tmp"
+	local __temp_file="/tmp/avorion/${__instance}/${__file}.tmp"
 	local __editor
 
 	if ! [[ -w "${__inst_file}" ]]; then
@@ -644,7 +735,7 @@ function __perform_config_edits () {
 		die "File is not writable. Are the permissions correct?"	
 	fi
 
-	if [[ -d "/tmp/avorion-cmd/${__instance}" ]]; then 
+	if [[ -d "/tmp/avorion/${__instance}" ]]; then 
 		[[ -f "${__temp_file}" ]] \
 			&& die "Config file is already open by another"
 	else
@@ -700,12 +791,12 @@ function __show_service_instances () {
 		local _instance="${_sock%%.sock*}"
 	
 		if systemctl list-units 'avorion@*' 2>&1 | grep -q "^avorion@${_instance}.service " >/dev/null 2>&1 ; then
-			systemctl status avorion@"${_instance}" >/dev/null 2>&1 \
+			systemctl status --no-pager avorion@"${_instance}" >/dev/null 2>&1 \
 				&& echo "${_instance} (avorion@${_instance}) -- ${_grn}Online${_clr}" \
 				|| echo "${_instance} (avorion@${_instance}) -- ${_red}Offline${_clr}"
 		else
 			if [[ -f "/etc/systemd/system/${_instance}.service" ]]; then
-				systemctl status "${_instance}" >/dev/null 2>&1 \
+				systemctl status --no-pager "${_instance}" >/dev/null 2>&1 \
 					&& echo "${_instance} -- ${_grn}Online${_clr}" \
 					|| echo "${_instance} -- ${_red}Offline${_clr}"
 			fi
@@ -730,22 +821,16 @@ function __check_screen_tmux () {
 
 function main () {
 	# Die if there are no arguments passed
-	[[ $# -eq 0 ]] ||\
+	(( $# < 1 )) &&\
 		die "Usage: $CMDNAME <options> <parameters>"
-
-	__validate_setting_conf && source /etc/avorionsettings.conf
-	__assert_valid_execution
-	__set_globals
-
-	local __err_bad_inst='Invalid instance passed:'
-
+	
 	# Check for the existence of the given strings in the positional
 	# parameter list. If they exist, remove it from said parameter
 	# list and continue execution after setting the requisite vars.
 	for _arg; do
 		shift
 
-		case "$1" in
+		case "$_arg" in
 			--debug) VERBOSE=1; continue ;;
 			--allow-screen) NOSCREENCHECK=1; continue;;
 		esac
@@ -753,12 +838,18 @@ function main () {
 		set -- "$@" "${_arg}"
 	done
 
+	__validate_setting_conf && source /etc/avorionsettings.conf
+	__assert_valid_execution
+	__set_globals
+
+	local __err_bad_inst='Invalid instance passed:'
+
 	case "$1" in
 		start )
 			__check_screen_tmux &&\
 				die "$CMDNAME $1 should not be run in a screen or tmux session"
 
-			__set_tmux_instance "$2" ||\
+			__set_tmux_instance --skip-active-check "$2" ||\
 				die "${__err_bad_inst} <$2>"
 
 			__start_avorion_instance "$_tmuxsess" ||\
@@ -919,6 +1010,7 @@ Commands:
 	config
 		Edit the specified configuration file for the Avorion instance given.
 		${_grn}${CMDNAME} config <instance> <file>${_clr}
+		${_red}WARNING:${_clr} Use this at your own risk. This feature is still under development and may be scrapped
 		
 		Avorion Config Files:
 			server.ini
@@ -974,10 +1066,10 @@ _EOF_
 #		its version matching (eg: Wildcards)
 function __compare_version_string () {
 	local __do_warn=0
-	
+
 	for __arg; do
 		shift
-		if [[ "$1" == "--warn" ]]; then
+		if [[ "$__arg" == "--warn" ]]; then
 			__do_warn=1
 			continue
 		fi
@@ -985,7 +1077,10 @@ function __compare_version_string () {
 	done
 
 	(( $# < 2 )) &&\
-		die "Syntax error in __compare_version_string: Not enough arguments"
+		die "Syntax error in __compare_version_string: Not enough arguments" 1>&2
+
+	(( $# > 2 )) &&\
+		die "Syntax error in __compare_version_string: Too many arguments" 1>&2
 	
 	local -a __checkstr_arr __basestr_arr
 	local __check __base
@@ -995,6 +1090,8 @@ function __compare_version_string () {
 	local __warn=0
 	local __diff=0
 	
+	dbgsay "Is $__checkstr >= $__basestr"
+
 	## Prevent * from breaking everything by replacing those with
 	## '?' characters. (* will expand into filenames, ? will not.)
 	__checkstr="${__checkstr//\*/?}"
@@ -1021,54 +1118,52 @@ function __compare_version_string () {
 		## warning that is set for when verbose output is enabled.
 		if [[ "$__check" == '?' ]] || [[ "$__base" == '?' ]]; then
 			__warn=1
-			__pass=1
 			break
 
 		## If one of the strings is exmpty, we've reached the end of this
 		## version string and can stop. Check is considered successful.
 		elif [[ -z "$__check" ]] || [[ -z "$__base" ]]; then
 			__warn=2
-			__pass=1
 			break
 		fi
 		
 		## If the base version string ($2) is less than the version we are
-		## checking ($1), continue.
+		## checking ($1), break.
 		if (( __base < __check )); then
-			__diff="$(( __base - __check ))"
+			__diff="$(( __check - __base ))"
+			break
 		
+		## Version substring matches, so continue
+		elif (( __base == __check )); then
+			continue
+	
 		## If the base version string ($2) is **higher** then the version
 		## we are checking, then the check is considered a fail, and we stop.
+		## 
+		## At this point, we return 1 to indicate failure
 		elif (( __base > __check )); then
-			__pass=0
-			break
+			dbgsay "Cause: $__base > $__check"
+			return 1
 		fi
 	done
 	
-	## Return our failure state if we didn't pass
-	if (( __pass < 1 )); then
-		return 1
-	fi
-
 	## When verbose error output is enabled, we want to output the following to
 	## standard output. Note that the string refernces below are replacing '?' with '*'
 	## Also note that the following only outputs on a successful run.
 	if (( __do_warn > 0 )); then
 		case "$__warn" in
-			1 ) printf '\t%s\n' \
-					"Wildcard version string is in use: <${__checkstr//\?/*}>"
-				;;
-				
-			2 ) printf '\t%s\n' \
-					"Version string missing latest point release: <${__checkstr//\?/*}> "
-				;;
+			1) printf "${_yel}Wildcard version string is in use: <%s>${_clr}\n" "${__checkstr//\?/*}" ;;
+			2) printf "${_yel}Version string missing latest point release: <%s>${_clr}\n" "${__checkstr//\?/*}" ;;
 		esac
 	
-		if (( __diff > 0 )); then
-			printf '\t%s\n' \
-				"Passing point release is $__diff version$(plural "$__diff") higher than current update: <${__checkstr//\?/*}>"
+		if (( __diff > 5 )); then
+			printf "${_yel}Passing point release is <%s> version$(plural "$__diff") higher than current update. Mod version: <%s>${_clr}\n" \
+				"$__diff" \
+				"${__checkstr//\?/*}"
 		fi    
 	fi
+
+	return 0
 }
 
 # void say <string, ...>
@@ -1083,9 +1178,9 @@ function say () {
 #	the arguments passed to this function. Otherwise,
 #	return code 1
 function dbgsay () {
-	[[ "${VERBOSE}" == 1 ]] &&\
-		say "$@" ||\
-		return 1
+	if (( "${VERBOSE}" > 0 )); then
+		say "$@"
+	fi
 }
 
 # int die <options> <string>
@@ -1112,7 +1207,8 @@ function yesno () {
 	_prompt="${1-Yes/No}"
 
 	while true; do
-		read -r _answer -p "[${_prompt}]> "
+		printf "[${_prompt}]> "
+		read -r _answer
 		case "${_answer}" in
 			[yY][eE][sS] | [yY] )
 				return 0
@@ -1132,7 +1228,7 @@ function yesno () {
 #	int does not equal 1
 function plural () {
 	if [[ "$1" =~ ^[0-9]+$ ]]; then
-		if ! (( $1 != 1 )); then
+		if (( $1 != 1 )); then
 			printf '%s' 's'
 			return 0
 		fi
