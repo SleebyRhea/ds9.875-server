@@ -10,11 +10,6 @@ if ps faux | grep -q AvorionServer >/dev/null 2>&1; then
 	exit 2
 fi
 
-if ! ( cd ./root >/dev/null 2>&1 ); then
-	echo "Unable to switch to root. Please make sure to run this from the project root"
-	exit 1
-fi
-
 if ! [ -e working ] && ! [ -d working ]; then
 	if ! mkdir working >/dev/null; then
 		echo "Failed to create 'working' directory"
@@ -39,6 +34,11 @@ mv -t backup/ \
 	/etc/systemd/system/avorion@.service \
 	/etc/systemd/system/steamcmd.service \
 	/usr/local/bin/avorion-cmd \
+
+if ! ( cd ./root >/dev/null 2>&1 ); then
+	echo "Unable to switch to root. Please make sure to run this from the project root"
+	exit 1
+fi
 
 install -m 644 etc/avorioncmd-tmux.conf /etc/avorioncmd-tmux.conf
 install -m 644 etc/avorionsettings.conf /etc/avorionsettings.conf
