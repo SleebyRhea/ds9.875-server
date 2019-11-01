@@ -48,6 +48,10 @@ install -m 0440 etc/sudoers.d/avorion-ds9 /etc/sudoers.d/avorion-ds9
 install -m 755 usr/local/bin/avorion-cmd /usr/local/bin/avorion-cmd
 
 source /etc/avorionsettings.conf
+if [ -z "$AVORION_SERVICEDIR" ] || [ -z "$AVORION_ADMIN_GRP" ] || [ -z "$AVORION_USER" ]; then
+	echo "Avorion instance definitions missing"
+	exit 1
+fi
 
 if ! [ -d "$AVORION_SERVICEDIR" ]; then
 	mkdir "$AVORION_SERVICEDIR"
