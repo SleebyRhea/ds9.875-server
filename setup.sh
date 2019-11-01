@@ -46,3 +46,23 @@ install -m 644 etc/systemd/system/avorionservers.target /etc/systemd/system/avor
 install -m 644 etc/systemd/system/avorion@.service /etc/systemd/system/avorion@.service
 install -m 0440 etc/sudoers.d/avorion-ds9 /etc/sudoers.d/avorion-ds9
 install -m 755 usr/local/bin/avorion-cmd /usr/local/bin/avorion-cmd
+
+source /etc/avorionsettings.conf
+
+if ! [ -d "$AVORION_SERVICEDIR" ]; then
+	mkdir "$AVORION_SERVICEDIR"
+fi
+
+if ! [ -d "${AVORION_SERVICEDIR}/sockets" ]; then
+	mkdir "$AVORION_SERVICEDIR"
+fi
+
+echo "Setting permissions for <${AVORION_SERVICEDIR}>"
+chown -R "$AVORION_USER":"$AVORION_ADMIN_GRP" "$AVORION_SERVICEDIR"
+__filesys="$(df "$AVORION_SERVICEDIR" 2>&1 | tail -n 1 | awk '{printf "%s",$1}')"
+if { echo "$__filesys" | grep -q 'type xfs' >/dev/null 2>&1; } || { echo "$__filesys" | grep -q acl >/dev/null 2>&1; }; then
+	setfacl -b "$AVORION_SERVICEDIR"
+	chmod g+s "$AVORION_SERVICEDIR"
+	setfacl -d -m u:"$AVORION_USER":rwX "$AVORION_SERVICEDIR"
+	setfacl -d -m g:"$AVORION_ADMIN_GRP":rwX "$AVORION_SERVICEDIR"
+fi
