@@ -485,17 +485,13 @@ function __check_incompatible_modlist () {
 #	present on the system.
 function __perform_update () {
 	local _units _inst _steamcmd _updatedir _failed _instdir
+	local __newversion __oldversion __oldgrp __oldusr __oldhome
 
 	_updatedir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	_currentdir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}"
 	_failed=0
 	FORCE=1
-	
-	## Overwrite default environment to fix sudo+steamcmd stupidity
-	export USER="$AVORION_USER"
-	export GROUP="$AVORION_ADMIN_GRP"
-	export HOME="$AVORION_SERVICEDIR"
-	
+
 	# Quick check to make sure that SteamCMD is present either
 	# in steamcmd or steamcmd.sh form
 	if [[ -f "$STEAMCMD_BIN" ]] || command -v "$STEAMCMD_BIN" 2>/dev/null; then
@@ -508,7 +504,7 @@ function __perform_update () {
 	fi
 
 	if [[ ! -d /tmp/avorion ]]; then
-		sudo -n -u avorion -g dsnineadm mkdir /tmp/avorion ||\
+		sudo -n -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" mkdir /tmp/avorion ||\
 			die "Unable to create tmp directory"
 	fi
 
@@ -538,6 +534,14 @@ function __perform_update () {
 			__stop_avorion_instance "${__inst}"
 		done <<< "${_units}"
 	fi
+	
+	## Overwrite default environment to fix sudo+steamcmd stupidity
+	__oldgrp="$GROUP"
+	__oldusr="$USER"
+	__oldhome="$HOME"
+	export USER="$AVORION_USER"
+	export GROUP="$AVORION_ADMIN_GRP"
+	export HOME="$AVORION_SERVICEDIR"
 
 	# Download the latest version to: "${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	# ex: /srv/avorion/server_dir.updatefiles
@@ -554,6 +558,11 @@ function __perform_update () {
 		_failed=1
 	fi
 
+	## Revert stupid fix
+	export USER="$__oldusr"
+	export HOME="$__oldhome"
+	export GROUP="$__oldgrp"
+
 	if (( _failed > 0 )) || [[ ! -f "$_updatedir"/bin/AvorionServer ]]; then
 		if [[ -d "$_updatedir" ]]; then
 			rm -rf "$_updatedir" >/dev/null 2>&1
@@ -561,7 +570,7 @@ function __perform_update () {
 		die "Failed to download new update"
 	fi
 
-	# Acquire the Avorion version of the new update
+	# Acquire the Avorion version of the updated and old binary
 	__newversion="$( "$_updatedir"/bin/AvorionServer --version | tr -dc '[0-9.\*]')"
 
 	echo
@@ -578,7 +587,9 @@ function __perform_update () {
 	echo
 	# If there is prior server data, move that to a backup, just in case.
 	if [[ -d "$_currentdir" ]]; then
-		mv "$_currentdir" "${_currentdir}.updatebak-${EDATE}" ||\
+		__oldversion="$( "$_currentdir"/bin/AvorionServer --version | tr -dc '[0-9.\*]')"
+		echo "Preserving old server version: <$__oldversion> as <${_currentdir}.updatebak-${__oldversion}>"
+		mv "$_currentdir" "${_currentdir}.updatebak-${__oldversion}" ||\
 			die "Unable to migrate old server installation!"
 	fi
 
@@ -586,8 +597,8 @@ function __perform_update () {
 	# attempt to revert, and exit
 	if ! mv "$_updatedir" "$_currentdir"; then
 		say "Unable to move update data to ${_currentdir}!"
-		if [[ -d "${_currentdir}.updatebak-${EDATE}" ]]; then
-			mv "${_currentdir}.updatebak-${EDATE}" "${_currentdir}" ||\
+		if [[ -n "$__oldversion" ]] && [[ -d "${_currentdir}.updatebak-${EDATE}" ]]; then
+			mv "${_currentdir}.updatebak-${__oldversion}" "${_currentdir}" ||\
 				say "Failed to revert changes to ${_currentdir}!"	
 		fi
 		
