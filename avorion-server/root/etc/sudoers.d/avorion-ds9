@@ -1,12 +1,11 @@
-## Ds9Admin Group Permitted Commands
-Cmnd_Alias STEAM_COMMANDS = /opt/steam/steamcmd.sh +login anonymous +force_install_dir /srv/avorion/server_files.updatefiles +app_update 565060 validate +exit
-Cmnd_Alias AVORION_TEMP_CMDS = /bin/mkdir /tmp/avorion, /bin/touch /tmp/avorion/updatingavorion.lock, /bin/rm /tmp/avorion/updatingavorion.lock
+## DS9Admin Group Permitted Commands
+Cmnd_Alias AVORION_TEMP_CMDS = /bin/mkdir /tmp/avorion, /usr/bin/touch /tmp/avorion/updatingavorion.lock, /bin/rm /tmp/avorion/updatingavorion.lock
+Cmnd_Alias STEAM_COMMANDS = /usr/games/steamcmd +login anonymous +force_install_dir /srv/avorion/server_files.updatefiles +app_update 565060 validate +exit
 Cmnd_Alias AVORION_DS9SERVER_CMDS = /bin/systemctl start avorion@ds9server, /bin/systemctl stop avorion@ds9server, /bin/systemctl status avorion@ds9server, /bin/systemctl kill avorion@ds9server
 Cmnd_Alias AVORION_DS9TESTING_CMDS = /bin/systemctl start avorion@ds9testing, /bin/systemctl stop avorion@ds9testing, /bin/systemctl status avorion@ds9testing, /bin/systemctl kill avorion@ds9testing
 
-## Allows a user assigned to the dsnineadm group to run the above commands without using
-## sudo without needing a password.
-%ds9nineadm ALL=(ALL) NOPASSWD: STEAM_COMMANDS
-%ds9nineadm ALL=(ALL) NOPASSWD: AVORION_TEMP_CMDS
-%ds9nineadm ALL=(ALL) NOPASSWD: AVORION_DS9SERVER_CMDS
-%ds9nineadm ALL=(ALL) NOPASSWD: AVORION_DS9TESTING_CMDS
+## Allow DS9Admins to control the services defined above
+%dsnineadm ALL=(ALL) NOPASSWD: AVORION_DS9SERVER_CMDS, AVORION_DS9TESTING_CMDS
+
+## Allow DS9Admins to operate run steamcmd and create/rm select lockfiles
+%dsnineadm ALL=(avorion:dsnineadm) NOPASSWD: STEAM_COMMANDS, AVORION_TEMP_CMDS
