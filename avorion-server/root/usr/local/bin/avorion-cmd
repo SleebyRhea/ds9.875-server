@@ -5,7 +5,11 @@ CMDNAME="$(basename "$0")"
 EDATE="$(date +%s)"
 VERBOSE=0
 NOSCREENCHECK=0
+
+## Used to prevent confirmation dialogues
 FORCE=0
+
+## Suppress output to stdout when this is given
 CRON=0
 
 # bool __check_requirements <void>
@@ -217,11 +221,16 @@ function __start_avorion_instance () {
 			(( CRON < 1 )) && printf 'Starting <%s>...' "$_sess"
 			
 			if sudo -n systemctl start avorion@"$_sess" >/dev/null 2>&1; then
-				printf "${_grn}%s${_clr}\n" 'Success'
+				(( CRON < 1 )) && printf "${_grn}%s${_clr}\n" 'Success'
 				return 0
 			fi
 		
-			printf "${_red}%s${_clr}\n" 'Fail'
+			if (( CRON < 1 )); then
+				printf "${_red}%s${_clr}\n" 'Fail'
+			else
+				printf 'Failed to start avorion@%s.service\n' "${_sess}"
+			fi
+
 			return 1
 		fi
 	fi
@@ -247,14 +256,14 @@ function __stop_avorion_instance () {
 
 	dbgsay "Using pid: $_pid"
 
-	printf 'Stopping <%s> instance, this could take a while...' "$1"
+	(( CRON < 1 )) && printf 'Stopping <%s> instance, this could take a while...' "$1"
 	"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/${1}.sock" \
 		send-keys ENTER "/say Stopping Avorion..." ENTER "/save" ENTER "/stop" ENTER \;
 
 	## Continue looping while the /proc/$_pid/cmdline points to the correct executable
 	while [[ -d "/proc/$_pid" ]] && grep -q "$AVORION_SERVICEDIR/$AVORION_BINDIR/bin/AvorionServer --galaxy-name ${1} " "/proc/$_pid/cmdline" >/dev/null 2>&1; do
 		if ((_time < 1000 )); then
-			printf '.'
+			(( CRON < 1 )) && printf '.'
 			sleep 1
 		else
 			printf '\nInstance <%s> seems to be hanging, forcefully shutting down. This make take a moment.' "$1"
@@ -268,7 +277,7 @@ function __stop_avorion_instance () {
 	done
 
 	sudo -n systemctl stop avorion@"$1" >/dev/null 2>&1
-	printf "Done.\n"
+	(( CRON < 1 )) && printf "Done.\n"
 
 	return 0
 }
@@ -427,14 +436,14 @@ function __check_incompatible_modlist () {
 		__inst_list="${BASH_REMATCH[3]}"
 
 		if [[ -n "$__maxstring" ]]; then
-			if ! __compare_version_string "$__maxstring" "$__avorion_version_string" $__warn >>"$TMP_FILE"; then
+			if ! __compare_version_string "$__maxstring" "$__avorion_version_string" $__warn >> "$TMP_FILE"; then
 				echo "Mod max version <$__maxstring> is lower than <$__avorion_version_string>" >> "$TMP_FILE"
 				__pass=0
 			fi
 		fi
 
 		if [[ -n "$__minstring" ]]; then
-			if ! __compare_version_string "$__avorion_version_string" "$__minstring" $__warn >>"$TMP_FILE"; then
+			if ! __compare_version_string "$__avorion_version_string" "$__minstring" $__warn >> "$TMP_FILE"; then
 				echo "Mod min version <$__minstring> is higher than <$__avorion_version_string>" >> "$TMP_FILE"
 				__pass=0
 			fi
@@ -475,21 +484,17 @@ function __check_incompatible_modlist () {
 #	to install avorion if the server was not already
 #	present on the system.
 function __perform_update () {
-	local _units _inst _steamcmd _updatedir _failed _newversion _instdir _modname __ret
+	local _units _inst _steamcmd _updatedir _failed _instdir
 
 	_updatedir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	_currentdir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}"
 	_failed=0
-
-	## Overwrite default environment to fix sudo+steamcmd stupidity
-	USER="$AVORION_USER"
-	GROUP="$AVORION_ADMIN_GRP"
-	HOME="$AVORION_SERVICEDIR"
-
-	## Prevent instance control functions from doing validation
-	## since we will be operating on instances that have already
-	## gone through those in the first place.
 	FORCE=1
+	
+	## Overwrite default environment to fix sudo+steamcmd stupidity
+	export USER="$AVORION_USER"
+	export GROUP="$AVORION_ADMIN_GRP"
+	export HOME="$AVORION_SERVICEDIR"
 	
 	# Quick check to make sure that SteamCMD is present either
 	# in steamcmd or steamcmd.sh form
@@ -544,7 +549,6 @@ function __perform_update () {
 	# NOTE2: Note also that - as this command uses sudo - the /etc/sudoers.d/avorion-ds9 file MUST be
 	#        be up to date and reflectant of the settings in /etc/avorionsettings.conf in order for
 	#        this to work correctly.
-	
 	cd "$AVORION_SERVICEDIR" || die "Failed to cd into service directory <$AVORION_SERVICEDIR>"
 	if ! sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" -n "$_steamcmd" +login anonymous +force_install_dir "$_updatedir" +app_update "$AVORION_STEAMID" validate +exit; then
 		_failed=1
@@ -552,7 +556,7 @@ function __perform_update () {
 
 	if (( _failed > 0 )) || [[ ! -f "$_updatedir"/bin/AvorionServer ]]; then
 		if [[ -d "$_updatedir" ]]; then
-			rm -rf "$_updatedir" >/dev/null; 2>&1
+			rm -rf "$_updatedir" >/dev/null 2>&1
 		fi
 		die "Failed to download new update"
 	fi
@@ -595,7 +599,7 @@ function __perform_update () {
 		while read -r _inst; do
 			_inst="${_inst%%.service}"
 			_inst="${_inst##avorion@}"
-			printf "Restarting <$_inst>..."
+			printf "Restarting <%s>..." "$_inst"
 			if ! __start_avorion_instance "${_inst}"; then
 				(( _failed++ ))
 				printf "${_red}FAILED${_clr}\n"
@@ -760,7 +764,7 @@ function __perform_config_edits () {
 	fi
 
 	# Ignore shellcheck here, we **want** this to expand
-	trap "rm ${__temp_file} >/dev/null 2>&1 && echo 'Removed tempfile' || echo 'Unable to remove tempfile'" EXIT SIGTERM
+	trap "rm ${__temp_file} >/dev/null 2>&1 || echo 'Unable to remove tempfile'" EXIT SIGTERM
 
 	"${__editor}" "${__temp_file}" \
 		|| die "Unable to write to <${__temp_file}>"
@@ -833,7 +837,8 @@ function main () {
 
 		case "$_arg" in
 			--debug) VERBOSE=1; continue ;;
-			--allow-screen) NOSCREENCHECK=1; continue;;
+			--allow-screen) NOSCREENCHECK=1; continue ;;
+			--cron) CRON=1; continue ;;
 		esac
 
 		set -- "$@" "${_arg}"
