@@ -210,22 +210,36 @@ function __set_globals () {
 
 function __start_avorion_instance () {
 	local _prompt="Are you certain you wish to start ${_grn}$1${_clr}?"
-	local _sess="$1"
-	
+	local _noout=0
+
+	for __arg; do
+		shift
+		case "$__arg" in
+			--suppress-output) _noout=1; continue ;;
+		esac
+		set -- "$@" "$__arg"
+	done
+
+
+	if (( $(( FORCE + CRON )) > 0 )); then
+		_noout=1
+	fi
+
 	## Strip avorion@ and .service for sanity
+	local _sess="$1"
 	_sess="${_sess%%.service}"
 	_sess="${_sess##avorion@}"
 
 	if ! systemctl status --no-pager avorion@"$_sess".service >/dev/null 2<&1; then
-		if (( FORCE > 0)) || (( CRON > 0 )) || yesno "$_prompt"; then
-			(( CRON < 1 )) && printf 'Starting <%s>...' "$_sess"
+		if  (( _noout > 0 )) || yesno "$_prompt"; then
+			(( _noout < 1 )) && printf 'Starting <%s>...' "$_sess"
 			
 			if sudo -n systemctl start avorion@"$_sess" >/dev/null 2>&1; then
-				(( CRON < 1 )) && printf "${_grn}%s${_clr}\n" 'Success'
+				(( _noout < 1 )) && printf "${_grn}%s${_clr}\n" 'Success'
 				return 0
 			fi
 		
-			if (( CRON < 1 )); then
+			if (( _noout < 1 )); then
 				printf "${_red}%s${_clr}\n" 'Fail'
 			else
 				printf 'Failed to start avorion@%s.service\n' "${_sess}"
@@ -295,7 +309,7 @@ function __check_incompatible_modlist () {
 	local __avorion_version_string __instdir __modlist __pass __inst_comma __warn
 	local __curmaxverstring __newmaxverstring __curminverstring __newminverstring
 	local __minstring __maxstring __verbose_version_checks __fail_count
-	local __verbose_version_checks
+	local __verbose_version_checks __newinstlist __curinstlist
 
 	__warn=''
 	__avorion_version_string="$1"
@@ -323,8 +337,9 @@ function __check_incompatible_modlist () {
 		__modded_insts["$( basename "$__instdir" )"]=PASS
 	done <<< "$( find "$AVORION_SERVICEDIR" -maxdepth 2 -type f -name modconfig.lua -printf '%h\n' 2>/dev/null )"
 
+	echo "Searching for modded instances..."
 	for _inst in "${!__modded_insts[@]}"; do
-		echo "Found: <$_inst>"
+		printf '>> Found: <%s>\n' "$_inst"
 	done
 
 	if (( ${#__modded_insts[@]} < 1 )); then
@@ -332,8 +347,9 @@ function __check_incompatible_modlist () {
 		return 0
 	fi
 
-	printf "Gathering data for version checking..."
+	printf "\nGathering data for version checking..."
 
+	dbgsay ""
 	## Gather mod information from all of the instances currently present.
 	for __inst in "${!__modded_insts[@]}"; do
 		## Parse out all of the workshop IDs for the operative instance
@@ -351,6 +367,7 @@ function __check_incompatible_modlist () {
 
 			__newmaxverstring=''; __curmaxverstring=''
 			__newminverstring=''; __curminverstring=''
+			__newinstlist='';__curinstlist=''
 			__inst_comma=','
 
 			if [[ ! "$__modid" =~ ^[0-9][0-9]*$ ]]; then
@@ -363,23 +380,24 @@ function __check_incompatible_modlist () {
 			##		1. Max Version (The highest max version found in any instance dir)
 			##		2. Min Version (The highest min version found in any instance dir)
 			##		3. Instance List (list of instances that have this mod
-			if [[ -z "${__mod_data["$__modid"]}" ]]; then
+			if [[ ! "${__mod_data["$__modid"]}" =~ ^([^:]*):([^:]*):([^:]*)$ ]]; then
+				dbgsay "Generating new data for $__modid"
 				__mod_data["$__modid"]='::'
 			fi
-
-			[[ "${__mod_data["$__modid"]//:/_}" =~ ^([^:]*):([^:]*):([^:]*)$ ]]
 			
 			__curmaxverstring="${BASH_REMATCH[1]}"
 			__curminverstring="${BASH_REMATCH[2]}"
 			__curinstlist="${BASH_REMATCH[3]}"
 
+			[[ -z "$__curinstlist" ]] && __inst_comma=''
+			
 			## Get the max version for the operative mod.
 			## TODO: Refine this into either a proper sed or awk parser.
 			__newmaxverstring="$(
 				grep max "${AVORION_SERVICEDIR}/${__inst}/workshop/content/445220/${__modid}/modinfo.lua" |\
 				grep -v '^[[:space:]]*\-\-' |\
 				grep 'id[[:space:]]*=[[:space:]]*"Avorion"' |\
-				grep -o 'max[[:space:]]*=[[:space:]]"[^\"]*"' |\
+				grep -o '[[:space:]]*max[[:space:]]*=[[:space:]]*"[^\"]*"' |\
 				sed 's,[^0-9\.\*],,g;s,\n,,g'
 			)"
 			
@@ -389,7 +407,7 @@ function __check_incompatible_modlist () {
 				grep min "${AVORION_SERVICEDIR}/${__inst}/workshop/content/445220/${__modid}/modinfo.lua" |\
 				grep -v '^[[:space:]]*\-\-' |\
 				grep 'id[[:space:]]*=[[:space:]]*"Avorion"' |\
-				grep -o 'min[[:space:]]*=[[:space:]]"[^\"]*"' |\
+				grep -o '[[:space:]]*min[[:space:]]*=[[:space:]]*"[^\"]*"' |\
 				sed 's,[^0-9\.\*],,g;s,\n,,g'
 			)"
 
@@ -401,11 +419,12 @@ function __check_incompatible_modlist () {
 				__curminverstring="$__newminverstring"
 			fi
 
-			if [[ -z "$__curinstlist" ]]; then
-				__inst_comma=''
+			if ! grep -q "\(^${__inst}\|,${__inst},\|,${__inst}$\)" <<< "$__curinstlist" >/dev/null 2>&1; then
+				__newinstlist="${__curinstlist}${__inst_comma}${__inst}"
 			fi
 
-			__mod_data["$__modid"]="${__curmaxverstring}:${__curminverstring}:${__curinstlist}${__inst_comma}${__inst}"
+			__mod_data["$__modid"]="${__curmaxverstring}:${__curminverstring}:${__newinstlist}"
+			dbgsay "Data Collated for <$__modid>: ${__mod_data["$__modid"]//:/ }"
 		done <<< "$__modlist"
 	done
 	
@@ -454,7 +473,7 @@ function __check_incompatible_modlist () {
 			(( __fail_count++ ))
 			for __inst in ${__inst_list//,/ }; do
 				__modded_insts[$__inst]=FAIL
-				printf '\t%s\n' "${AVORION_SERVICEDIR}/${_inst}/workshop/content/445220/${__modid}"
+				printf '\t%s\n' "${AVORION_SERVICEDIR}/${__inst}/workshop/content/445220/${__modid}"
 			done
 		else
 			printf "${_grn}%s${_clr}\n" 'PASS'
@@ -467,11 +486,9 @@ function __check_incompatible_modlist () {
 	printf '\nComplete, %s/%s passed version checks. Final instance status:\n' \
 		"$(( ${#__mod_data[@]} - __fail_count ))" "${#__mod_data[@]}"
 
-	if (( __fail_count > 0 )); then
-		for __inst in "${!__modded_insts[@]}"; do
-			printf '\t%s: %s\n' "$__inst" "${__modded_insts["$__inst"]}"
-		done
-	fi
+	for __inst in "${!__modded_insts[@]}"; do
+		printf '>> %s: %s\n' "$__inst" "${__modded_insts["$__inst"]}"
+	done
 
 	return "$__fail_count"
 }
@@ -484,13 +501,13 @@ function __check_incompatible_modlist () {
 #	to install avorion if the server was not already
 #	present on the system.
 function __perform_update () {
-	local _units _inst _steamcmd _updatedir _failed _instdir
+	local -a _units
+	local _inst _steamcmd _updatedir _failed _instdir
 	local __newversion __oldversion __oldgrp __oldusr __oldhome
 
 	_updatedir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	_currentdir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}"
 	_failed=0
-	FORCE=1
 
 	# Quick check to make sure that SteamCMD is present either
 	# in steamcmd or steamcmd.sh form
@@ -513,26 +530,27 @@ function __perform_update () {
 		die "Update process already running, or a stale lock is present (/tmp/avorion/updatingavorion.lock)."
 	fi
 
-	sudo -n -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" touch /tmp/avorion/updatingavorion.lock >/dev/null 2>&1 ||\
+	sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" -n touch /tmp/avorion/updatingavorion.lock ||\
 		die "Unable to create avorion lockfile! Check /tmp usage." &&\
 		echo "Updates locked."
 
 	# Make sure that the update lock is removed following this
 	# scripts end
-	trap 'sudo -n -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" rm -rf /tmp/avorion/updatingavorion.lock;echo "Updates unlocked"; exit 0' EXIT INT TERM
+	trap 'sudo -n -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" rm /tmp/avorion/updatingavorion.lock && echo "Updates unlocked" || echo "Failed to unlock updates"; exit 0' EXIT INT TERM
 
 	# Queries the systemd bus for active avorion@ instances and saves them
-	_units="$(systemctl list-units 'avorion@*' | grep '^[[:space:]]*avorion@[^[:space:]][^[:space:]]*.service[[:space:]][[:space:]]*loaded[[:space:]][[:space:]]*active[[:space:]][[:space:]]*running' | awk '{print $1}')"
+	printf "Checking for active Avorion instances..."
+	_units=( $(systemctl list-units 'avorion@*' | grep '^[[:space:]]*avorion@[^[:space:]][^[:space:]]*.service[[:space:]][[:space:]]*loaded[[:space:]][[:space:]]*active[[:space:]][[:space:]]*running' | awk '{print $1}') )
+	printf 'Found %s\n' "${#_units[@]}"
 	
-	dbgsay "Active instances: $_units"
 	# If there were any active instances, stop them.
-	if [[ -n "${_units}" ]]; then
-		while read -r _inst; do
+	if (( "${#_units[@]}" > 0 )); then
+		for _inst in "${_units[@]}"; do
 			_inst="${_inst%%.service}"
 			_inst="${_inst##avorion@}"
-			echo "Pausing <$_inst>"
+			printf '>> Pausing <%s>\n' "$_inst"
 			__stop_avorion_instance "${__inst}"
-		done <<< "${_units}"
+		done
 	fi
 	
 	## Overwrite default environment to fix sudo+steamcmd stupidity
@@ -553,6 +571,7 @@ function __perform_update () {
 	# NOTE2: Note also that - as this command uses sudo - the /etc/sudoers.d/avorion-ds9 file MUST be
 	#        be up to date and reflectant of the settings in /etc/avorionsettings.conf in order for
 	#        this to work correctly.
+	printf '\nRunning SteamCMD binary <%s>. Saving updates to <%s>\n' "$_steamcmd" "$_updatedir"
 	cd "$AVORION_SERVICEDIR" || die "Failed to cd into service directory <$AVORION_SERVICEDIR>"
 	if ! sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" -n "$_steamcmd" +login anonymous +force_install_dir "$_updatedir" +app_update "$AVORION_STEAMID" validate +exit; then
 		_failed=1
@@ -570,7 +589,7 @@ function __perform_update () {
 		die "Failed to download new update"
 	fi
 
-	# Acquire the Avorion version of the updated and old binary
+	# Acquire the Avorion version of the updated binary
 	__newversion="$( "$_updatedir"/bin/AvorionServer --version | tr -dc '[0-9.\*]')"
 
 	echo
@@ -588,17 +607,20 @@ function __perform_update () {
 	# If there is prior server data, move that to a backup, just in case.
 	if [[ -d "$_currentdir" ]]; then
 		__oldversion="$( "$_currentdir"/bin/AvorionServer --version | tr -dc '[0-9.\*]')"
+		if [[ -d "${_currentdir}.updatebak-${__oldversion}" ]]; then
+			rm -rf "${_currentdir}.updatebak-${__oldversion}" >/dev/null
+		fi
 		echo "Preserving old server version: <$__oldversion> as <${_currentdir}.updatebak-${__oldversion}>"
-		mv "$_currentdir" "${_currentdir}.updatebak-${__oldversion}" ||\
-			die "Unable to migrate old server installation!"
+		mv --strip-trailing-slashes -T "$_currentdir" "${_currentdir}.updatebak-${__oldversion}" >/dev/null 2>&1
 	fi
 
 	# Attempt to move the updated data to its final destination. Upon failure,
 	# attempt to revert, and exit
-	if ! mv "$_updatedir" "$_currentdir"; then
-		say "Unable to move update data to ${_currentdir}!"
-		if [[ -n "$__oldversion" ]] && [[ -d "${_currentdir}.updatebak-${EDATE}" ]]; then
-			mv "${_currentdir}.updatebak-${__oldversion}" "${_currentdir}" ||\
+	if ! mv --strip-trailing-slashes -T "$_updatedir" "$_currentdir"; then
+		echo "Unable to move update data to ${_currentdir}!"
+		if [[ -n "$__oldversion" ]] && [[ -d "${_currentdir}.updatebak-${__oldversion}" ]]; then
+			rm -rf "$_updatedir"
+			mv --strip-trailing-slashes -T "${_currentdir}.updatebak-${__oldversion}" "${_currentdir}" ||\
 				say "Failed to revert changes to ${_currentdir}!"	
 		fi
 		
@@ -606,19 +628,19 @@ function __perform_update () {
 	fi
 
 	# If any instances were up prior to the update, re-start them
-	if [[ -n "${_units}" ]]; then
-		while read -r _inst; do
+	if (( "${#_units[@]}" > 0 )); then
+		for _inst in "${_units[@]}"; do
 			_inst="${_inst%%.service}"
 			_inst="${_inst##avorion@}"
 			printf "Restarting <%s>..." "$_inst"
-			if ! __start_avorion_instance "${_inst}"; then
+			if ! __start_avorion_instance --suppress-output "${_inst}"; then
 				(( _failed++ ))
 				printf "${_red}FAILED${_clr}\n"
 				continue
 			fi
 
 			printf "${_grn}SUCCESS${_clr}\n"
-		done <<< "${_units}"
+		done
 	fi
 
 	if (( _failed > 0 )); then
@@ -1169,7 +1191,7 @@ function __compare_version_string () {
 	## Also note that the following only outputs on a successful run.
 	if (( __do_warn > 0 )); then
 		case "$__warn" in
-			1) printf "${_yel}Wildcard version string is in use: <%s>${_clr}\n" "${__checkstr//\?/*}" ;;
+			#1) printf "${_yel}Wildcard version string is in use: <%s>${_clr}\n" "${__checkstr//\?/*}" ;;
 			2) printf "${_yel}Version string missing latest point release: <%s>${_clr}\n" "${__checkstr//\?/*}" ;;
 		esac
 	
