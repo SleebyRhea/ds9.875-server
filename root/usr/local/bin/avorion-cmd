@@ -211,11 +211,13 @@ function __set_globals () {
 function __start_avorion_instance () {
 	local _prompt="Are you certain you wish to start ${_grn}$1${_clr}?"
 	local _noout=0
+	local _noprompt=0
 
 	for __arg; do
 		shift
 		case "$__arg" in
 			--suppress-output) _noout=1; continue ;;
+			--no-prompt) _noprompt=1; continue ;;
 		esac
 		set -- "$@" "$__arg"
 	done
@@ -231,7 +233,7 @@ function __start_avorion_instance () {
 	_sess="${_sess##avorion@}"
 
 	if ! systemctl status --no-pager avorion@"$_sess".service >/dev/null 2<&1; then
-		if  (( _noout > 0 )) || yesno "$_prompt"; then
+		if  (( _noout > 0 )) || (( _noprompt > 0 )) || yesno "$_prompt"; then
 			(( _noout < 1 )) && printf 'Starting <%s>...' "$_sess"
 			
 			if sudo -n systemctl start avorion@"$_sess" >/dev/null 2>&1; then
@@ -298,8 +300,7 @@ function __stop_avorion_instance () {
 
 function __restart_avorion_instance () {
 	__stop_avorion_instance "$1"
-	FORCE=1 ##Skip confirmation dialogue
-	__start_avorion_instance "$1" &&\
+	__start_avorion_instance "$1" --no-prompt &&\
 		return 0 ||\
 		return 1
 }
