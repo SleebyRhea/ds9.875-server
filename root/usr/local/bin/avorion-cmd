@@ -666,12 +666,25 @@ function __perform_sector_reset () {
 	local _x1 _x2 _y1 _y2
 	local -a _sector_array
 	_save=0
-	_secdir="${AVORION_SERVICEDIR}/${_tmuxsess}/sectors/${EDATE}"
+	_secdir="${AVORION_SERVICEDIR}/${_tmuxsess}/sectors"
+
+	for __arg; do
+		shift
+		case "$__arg" in
+			--backup ) _save=1; continue;;
+		esac
+		set -- "$@" "$__arg"
+	done
+
+	if systemctl --no-pager status avorion@"$_tmuxsess" >/dev/null 2>&1; then
+		echo "$_tmuxsess is active, aborting."
+		exit 0
+	fi
 
 	# If the first argument is `--backups` then we don't need to confirm backups, we assume yes.
 	# We also use that opportunity to shift the positional arguments to the left. Since `shift`
 	# will return true, and only runs if the correct argument is found, this is still valid.
-	if { [[ "$1" -eq '--backup' ]] && shift; } || yesno "Would you like to save backups?"; then
+	if (( _save > 0 )) || yesno "Would you like to save backups?"; then
 		_save=1
 		_bakdir="${AVORION_SERVICEDIR}/${_tmuxsess}/sector_backup"
 		if [[ ! -d "${_bakdir}" ]]; then
@@ -694,6 +707,7 @@ function __perform_sector_reset () {
 				dbgsay "Queueing sector: <${_sector}>"
 				_sector_array+=( "${_secdir}/${_sector}" )
 			fi
+
 			shift; continue
 
 		# Only follow this path if the argument given is the defined range
@@ -704,6 +718,11 @@ function __perform_sector_reset () {
 		elif [[ "$1" =~ ^(-{0,1}[0-9]{1,3}):(-{0,1}[0-9]{1,3})-(-{0,1}[0-9]{1,3}):(-{0,1}[0-9]{1,3})$ ]]; then
 			_x1="${BASH_REMATCH[1]}"; _x2="${BASH_REMATCH[2]}"
 			_y1="${BASH_REMATCH[3]}"; _y2="${BASH_REMATCH[4]}"
+			dbgsay "Processing -- <x1:${_x1} - x2:${_x2}> <y1:${_y1} - y2:${_y2}>"
+			if (( _x2 < _x1 )) || ((  _y2 < _y1 )); then
+				printf '%s\n' "Invalid input: <$1>" "x2/y2 must be greater than x1/y1"
+				exit 1
+			fi
 			for _x in $(seq "$_x1" "$_x2"); do
 				for _y in $(seq "$_y1" "$_y2"); do
 					if ! [[ -f "${_secdir}/${_x}_${_y}" ]]; then
@@ -712,9 +731,10 @@ function __perform_sector_reset () {
 					fi
 
 					dbgsay "Queuing sector: <${_x}_${_y}>"
-					_sector_array+=( "${_secdir}/${_sector}" )
+					_sector_array+=( "${_secdir}/${_x}_${_y}" )
 				done
 			done
+			shift; continue
 
 		# Die if the "sector" given is just invalid.
 		else
@@ -722,28 +742,32 @@ function __perform_sector_reset () {
 		fi
 	done
 
-	# Obviously we dont need to continue if there are no
-	# sectors to process
 	if (( ${#_sector_array[@]} < 1 )); then
 		say "No sectors to be processed."
 		exit 0
 	fi
 	
-	# Confirmation of sector deletion. the `plural` function
-	# does exactly what it looks like it does. If the number
-	# is NOT one, return an `s`
-	if ! yesno "WARNING: Delete ${#_sector_array[@]} sector$(plural ${#_sector_array[@]})?"; then
+	if ! yesno "WARNING: Delete ${#_sector_array[@]} sector$(plural ${#_sector_array[@]})? Time taken *will* increase with sector count."; then
 		say "Aborted due to user input"
 		exit 0
 	fi
 
+	if [[ -f "${AVORION_SERVICEDIR}/${_tmuxsess}/sectorremoval-${EDATE}.log" ]]; then
+		mv -f "${AVORION_SERVICEDIR}/${_tmuxsess}/sectorremoval-${EDATE}.log" "${AVORION_SERVICEDIR}/${_tmuxsess}/sectorremoval-${EDATE}.log.bak"
+	fi
+
+	printf "Deleting sectors"
 	# For every sector queued, backup if specified, and then
 	# delete.
 	for _sector in "${_sector_array[@]}"; do
-		(( _save == 1 )) &&\
-			cp "$_sector" "${_bakdir}/"
-		rm "${_sector}"
+		(( _save > 0 )) && cp "$_sector" "${_bakdir}/"
+		rm -v "${_sector}"  >> "${AVORION_SERVICEDIR}/${_tmuxsess}/sectorremoval-${EDATE}.log"
+		if [[ -f "${_sector}v" ]]; then
+			rm "${_sector}v" >> "${AVORION_SERVICEDIR}/${_tmuxsess}/sectorremoval-${EDATE}.log"
+		fi
 	done
+	echo Done
+	echo "Logfile: ${AVORION_SERVICEDIR}/${_tmuxsess}/sectorremoval-${EDATE}.log"
 }
 
 # bool __perform_config_edits <string, string>
@@ -984,9 +1008,14 @@ function main () {
 				exit 0
 			;;
 
-		resetsector )
-			__set_tmux_instance "$2" ||\
+		resetsectors )
+			__set_tmux_instance "$2" --skip-active-check ||\
 				die "${__err_bad_inst} <$2>"
+
+			if ! [[ -d "$AVORION_SERVICEDIR/$_tmuxsess/sectors" ]]; then
+				echo "Instance $_tmuxsess has no sectors."
+				exit 1
+			fi
 
 			shift; shift
 			
