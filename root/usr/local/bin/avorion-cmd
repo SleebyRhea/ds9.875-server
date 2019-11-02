@@ -1095,11 +1095,6 @@ Commands:
 		${_grn}${CMDNAME} resetsectors <instance> <x:x-y:y>${_clr}
 		${_yel}This function is a work-in-progress!${_clr}
 
-	backup
-		Take a backup of the given instance.
-		${_grn}${CMDNAME} backup <instance>${_clr}
-		${_yel}NOTICE: Not currently implemented${_clr}
-	
 	update
 		Force a game update. Not usually necessary as simply restarting the server
 		should accomplish this.
