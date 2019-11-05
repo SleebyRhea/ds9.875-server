@@ -8,27 +8,23 @@ do
 	local __vanillaOnShutdown = onShutDown
 	local __vanillaOnStartup = onStartUp
 
-	function exportMetrics()
-
-	end
-
 	function onStartUp()
 		__vanillaOnStartup()
-
+		
 		local __serv = Server()
+		__metricsFile = __serv.folder .. __metricsFile
 
 		-- Prevent files that failed to open from breaking everything, and
 		-- overwrite our file so its empty if it exists
-		local f = io.open(__serv.folder .. __metricsFile,"w")
+		local f = io.open(__metricsFile,"w")
 		if type(f) == "nil" then
 			__doMetrics = false
-			print("[${mod}] Unable to open metrics file! File: <${file}>"%_T % {mod=__modName, file=__serv.folder .. __metricsFile})
+			print("[${mod}] Unable to initialize metrics file! File: <${file}>"%_T % {mod=__modName, file=__metricsFile})
+			print("[${mod}] Disabling metrics collection."%_T % {mod=__modName})
 		else
-			print("[${mod}] Exporting metrics to: <${file}>"%T % {mod=__modName, file=__serv.folder .. __metricsFile})
+			print("[${mod}] Exporting metrics to: <${file}>"%T % {mod=__modName, file=__metricsFile})
 			f:close()
 		end
-		
-
 	end
 
 	function update(timeStep)
@@ -46,23 +42,21 @@ do
 				local __plrcnt = __serv.players
 				local __maxplr = __serv.maxPlayers
 				local __time = os.time(os.date("!*t"))
-
-				local f = io.open(__serv.folder .. __metricsFile, "w+")
-				if type(f) == "nil" then
-					__doMetrics = false
-					print("[${mod}] Unable to write to our metrics file! File: <${file}>"%_T % {mod=__modName, file=__serv.folder .. __metricsFile})
-					return false
-				end
+				local __f = io.open(__metricsFile, "w+")
 				
-				print("[${mod}] Writing out metrics..."%_T % {mod=__modName} )
-				f:seek("set")
-				f:write('#HELP avorion_playercount Playercount for ${servname}\n'%_T % {servname=__servname} )
-				f:write('#TYPE avorion_playercount counter\n')
-				f:write('avorion_playercount { server="${servname}", count="online" } ${count} ${time}\n'%_T % {servname=__servname, count=__plrcnt, time=__time} )
-				f:write('avorion_playercount { server="${servname}", count="max" } ${count} ${time}\n'%_T % {servname=__servname, count=__maxplr, time=__time} )
-				f:close()
-				print("[${mod}] Finished writing metrics."%_T % {mod=__modName} )
-					end
+				if type(__f) == "nil" then
+					print("[${mod}] Unable to update metrics export file! File: <${file}>"%_T % {mod=__modName, file=__metricsFile})
+				else
+					print("[${mod}] Writing out metrics..."%_T % {mod=__modName} )
+					__f:seek("set")
+					__f:write('#HELP avorion_playercount Playercount for ${servname}\n'%_T % {servname=__servname} )
+					__f:write('#TYPE avorion_playercount counter\n')
+					__f:write('avorion_playercount { server="${servname}", count="online" } ${count} ${time}\n'%_T % {servname=__servname, count=__plrcnt, time=__time} )
+					__f:write('avorion_playercount { server="${servname}", count="max" } ${count} ${time}\n'%_T % {servname=__servname, count=__maxplr, time=__time} )
+					__f:close()
+					print("[${mod}] Finished writing metrics."%_T % {mod=__modName} )
+				end
+			end
 		end
 
 	end
