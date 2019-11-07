@@ -5,6 +5,8 @@ CMDNAME="$(basename "$0")"
 EDATE="$(date +%s)"
 VERBOSE=0
 NOSCREENCHECK=0
+VALIDCMDS='stop|start|restart|showinstances|view|attach|exec|update|resetsectors|usage|config'
+VALIDSWCHS='-I|-h|-u|--help|-V|--version'
 
 ## Used to prevent confirmation dialogues
 FORCE=0
@@ -59,15 +61,6 @@ function __assert_valid_execution () {
 	if [[ ! "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP$) ]] && [[ "$(id -u)" != 0 ]]; then
 		die "This command can only be run by a user with the group <${AVORION_ADMIN_GRP}> or by root."
 	fi
-}
-
-# bool __assert_valid_user_input <string>
-#	Check the string given for bash symbols
-#	and return error if any are found.
-function __assert_valid_user_input () {
-	[[ "$1" =~ [/\\\$\&\@\#\`\~\=\+\{\}\[\]\|\'\"] ]] &&\
-		return 1 ||\
-		return 0
 }
 
 # int __validate_setting_conf <void>
@@ -150,10 +143,16 @@ function __set_tmux_instance () {
 	
 	for _arg; do
 		shift
-		if [[ "$_arg" == '--skip-active-check' ]]; then
-			__skip_active=1
-			continue
-		fi
+			if [[ "$_arg" == '--skip-active-check' ]]; then
+				__skip_active=1
+				continue
+			fi
+
+			if [[ "$_arg" =~ ^${VALIDCMDS}|${VALIDSWCHS}$ ]]; then
+				echo "$_arg is not a valid instance name."
+				echo "Usage: $CMDNAME $_arg <instance_name>"
+				exit 1 
+			fi
 
 		set -- "$@" "$_arg"
 	done
@@ -249,10 +248,12 @@ function __start_avorion_instance () {
 			fi
 
 			return 1
+		else
+			return 0
 		fi
 	fi
 
-	(( _noout < 1 )) && printf 'Instance <%s> is already active.' "$_sess"
+	(( _noout < 1 )) && printf 'Instance <%s> is already active.\n' "$_sess"
 
 	return 0
 }
@@ -515,7 +516,7 @@ function __perform_update () {
 
 	# Quick check to make sure that SteamCMD is present either
 	# in steamcmd or steamcmd.sh form
-	if [[ -f "$STEAMCMD_BIN" ]] || command -v "$STEAMCMD_BIN" 2>/dev/null; then
+	if [[ -f "$STEAMCMD_BIN" ]] || command -v "$STEAMCMD_BIN" >/dev/null 2>&1; then
 		_steamcmd="$STEAMCMD_BIN"
 	else 
 		_steamcmd="$(command -v steamcmd 2>/dev/null | head -n1 2>/dev/null)"
@@ -861,6 +862,8 @@ function __show_service_instances () {
 		exit 0
 	fi
 
+	## Padded output modified from StackExchange
+	## 		https://stackoverflow.com/questions/4409399/padding-characters-in-printf
 	printf "${_bld}${_wht}Avorion Commander v%s\n\n" "$CMDVERS" 
 	printf "${__strinst}%*.*s%s${_clr}\n" 0 $(( __padlength - ${#__strinst} )) \
 		"$__pad" \
@@ -878,6 +881,7 @@ function __show_service_instances () {
 			__color="$_red"
 		fi
 		
+		## More formatted output
 		printf "${_bld}${_wht}${__strserv}"
 		printf '%*.*s' 0 $(( __padlength - ${#__strserv} )) "$__pad"
 		printf "${_clr}${__color}${__status}${_clr}\n"
@@ -1232,6 +1236,15 @@ function __compare_version_string () {
 	fi
 
 	return 0
+}
+
+# bool __assert_valid_user_input <string>
+#	Check the string given for bash symbols
+#	and return error if any are found.
+function __assert_valid_user_input () {
+	[[ "$1" =~ [/\\\$\&\@\#\`\~\=\+\{\}\[\]\|\'\"] ]] &&\
+		return 1 ||\
+		return 0
 }
 
 # void say <string, ...>
