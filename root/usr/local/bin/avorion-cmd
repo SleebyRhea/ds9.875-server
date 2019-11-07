@@ -491,7 +491,7 @@ function __check_incompatible_modlist () {
 			(( __fail_count++ ))
 			for __inst in ${__inst_list//,/ }; do
 				__modded_insts[$__inst]=FAIL
-				printf "${__f_lgray}\t%s\n" "${AVORION_SERVICEDIR}/${__inst}/workshop/content/445220/${__modid}"
+				printf "${__f_lgray}>> %s\n${__t_clear}" "${AVORION_SERVICEDIR}/${__inst}/workshop/content/445220/${__modid}"
 			done
 		else
 			printf "${__f_lgreen}%s${__t_clear}\n" 'PASS'
@@ -530,6 +530,7 @@ function __perform_update () {
 	local -a _units
 	local _inst _steamcmd _updatedir _failed _instdir __x
 	local __newversion __oldversion __oldgrp __oldusr __oldhome
+	local __steamcmd_command_string
 
 	_updatedir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	_currentdir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}"
@@ -614,7 +615,8 @@ function __perform_update () {
 	##	https://superuser.com/questions/868496/how-do-i-prepend-a-string-to-program-output-without-waiting-for-the-whole-line
 	##
 	## All of this for fancy output.
-	script -qefc "sudo -u $AVORION_USER -g $AVORION_ADMIN_GRP -n $_steamcmd +login anonymous +force_install_dir $_updatedir +app_update $AVORION_STEAMID validate +exit" /dev/null | {
+	__steamcmd_command_string="sudo -u $AVORION_USER -g $AVORION_ADMIN_GRP -n $_steamcmd +login anonymous +force_install_dir $_updatedir +app_update $AVORION_STEAMID validate +exit"
+	script -qefc "$__steamcmd_command_string" /dev/null | {
 		__x=1
 		while IFS= read -d'' -s -N 1 char; do
 			[[ -n "$__x" ]] && printf "${__f_lgray}>> "
@@ -647,11 +649,11 @@ function __perform_update () {
 	printf "${__f_white}\n"
 	if yesno "Would you like to check for incompatible mods?"; then
 		if ! __check_incompatible_modlist "$__newversion"; then
-			printf "${__f_white}"
+			printf "${__f_white}\n"
 			if ! yesno "Incompatible mods found, would you still like to proceed?"; then
-				say "Removing update files and aborting..."
+				printf "Removing update files and aborting.\n"
 				rm -rf "$_updatedir" >/dev/null
-				die "Done."
+				exit 1
 			fi
 		fi
 	fi
@@ -670,11 +672,11 @@ function __perform_update () {
 	# Attempt to move the updated data to its final destination. Upon failure,
 	# attempt to revert, and exit
 	if ! mv --strip-trailing-slashes -T "$_updatedir" "$_currentdir"; then
-		echo "Unable to move update data to ${_currentdir}!"
+		printf "${__f_lred}>> Unable to move update data to ${_currentdir}!${$__t_clear}"
 		if [[ -n "$__oldversion" ]] && [[ -d "${_currentdir}.updatebak-${__oldversion}" ]]; then
 			rm -rf "$_updatedir"
 			mv --strip-trailing-slashes -T "${_currentdir}.updatebak-${__oldversion}" "${_currentdir}" ||\
-				say "Failed to revert changes to ${_currentdir}!"	
+				printf "${__f_lred}>> Failed to revert changes to ${_currentdir}!${__t_clear}"
 		fi
 		
 		die "Aborting."
