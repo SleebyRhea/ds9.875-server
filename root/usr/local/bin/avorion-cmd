@@ -910,9 +910,6 @@ function main () {
 
 	case "$1" in
 		start )
-			__check_screen_tmux &&\
-				die "$CMDNAME $1 should not be run in a screen or tmux session"
-
 			__set_tmux_instance --skip-active-check "$2" ||\
 				die "${__err_bad_inst} <$2>"
 
@@ -922,9 +919,6 @@ function main () {
 			;;
 
 		stop )
-			__check_screen_tmux &&\
-				die "$CMDNAME $1 should not be run in a screen or tmux session"
-
 			__set_tmux_instance "$2" ||\
 				die "${__err_bad_inst} <$2>"
 
@@ -934,9 +928,6 @@ function main () {
 			;;
 
 		restart )
-			__check_screen_tmux &&\
-				die "$CMDNAME $1 should not be run in a screen or tmux session"
-
 			__set_tmux_instance "$2" ||\
 				die "${__err_bad_inst} <$2>"
 
@@ -945,12 +936,6 @@ function main () {
 				exit 0
 			;;
 		
-		lock )
-			__set_tmux_instance "$2" ||\
-				die "${__err_bad_inst} <$2>"
-			exit 0
-			;;
-
 		view | attach )
 			__check_screen_tmux &&\
 				die "$CMDNAME $1 should not be run in a screen or tmux session"
@@ -989,6 +974,8 @@ function main () {
 			;;
 
 		backup )
+			die "Not yet implemented"
+
 			__get_instance_dir ||\
 				die "${__err_bad_inst} <$2>"
 
