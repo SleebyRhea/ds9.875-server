@@ -856,9 +856,9 @@ function __show_service_instances () {
 	local __strinst=Instance
 	local __strserv __status __color
 
-	if ! (( "$(find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' -printf '.' | wc -c)" > 0 )); then
-		echo "No service instances running"
-		exit 1
+	if (( $(find "${AVORION_SERVICEDIR}"/* -maxdepth 1 -name 'server.ini' -printf . | wc -c) < 1 )); then 
+		echo "No instances configured in <$AVORION_SERVICEDIR>"
+		exit 0
 	fi
 
 	printf "${_bld}${_wht}Avorion Commander v%s\n\n" "$CMDVERS" 
