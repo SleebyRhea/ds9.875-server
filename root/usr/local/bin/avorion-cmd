@@ -758,7 +758,8 @@ function __perform_sector_reset () {
 	fi
 
 	if [[ -f "${AVORION_SERVICEDIR}/${_tmuxsess}/sectorremoval-${EDATE}.log" ]]; then
-		mv -f "${AVORION_SERVICEDIR}/${_tmuxsess}/sectorremoval-${EDATE}.log" "${AVORION_SERVICEDIR}/${_tmuxsess}/sectorremoval-${EDATE}.log.bak"
+		mv -f "${AVORION_SERVICEDIR}/${_tmuxsess}/sectorremoval-${EDATE}.log" \
+			"${AVORION_SERVICEDIR}/${_tmuxsess}/sectorremoval-${EDATE}.log.bak"
 	fi
 
 	printf "Deleting sectors..."
@@ -766,7 +767,7 @@ function __perform_sector_reset () {
 	# delete.
 	for _sector in "${_sector_array[@]}"; do
 		(( _save > 0 )) && cp "$_sector" "${_bakdir}/"
-		rm -v "${_sector}"  >> "${AVORION_SERVICEDIR}/${_tmuxsess}/sectorremoval-${EDATE}.log"
+		rm -v "${_sector}" >> "${AVORION_SERVICEDIR}/${_tmuxsess}/sectorremoval-${EDATE}.log"
 		if [[ -f "${_sector}v" ]]; then
 			rm "${_sector}v" >> "${AVORION_SERVICEDIR}/${_tmuxsess}/sectorremoval-${EDATE}.log"
 		fi
@@ -851,8 +852,6 @@ function __show_service_instances () {
 	local __padlimit=70
 	local __pad="$(printf '%*s' "$__padlimit")"
 	local __padlength=40
-	local __stron=ONLINE
-	local __stroff=OFFLINE
 	local __strstat=Status
 	local __strinst=Instance
 	local __strserv __status __color
@@ -918,6 +917,7 @@ function main () {
 			--debug) VERBOSE=1; continue ;;
 			--allow-screen) NOSCREENCHECK=1; continue ;;
 			--cron) CRON=1; continue ;;
+			--attach) DOATTACH=1; continue ;;
 		esac
 
 		set -- "$@" "${_arg}"
@@ -972,11 +972,22 @@ function main () {
 		exec )
 			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
+			
+			if (( DOATTACH > 0 )); then
+				__check_screen_tmux &&\
+					die "$CMDNAME exec should not be run in a screen or tmux session when --attach is used (use --allow-screen to force enable)"
+			fi
 
 			shift; shift
-			for __command; do
-				"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" send-keys ENTER "$__command" ENTER
+			for __param; do
+				"$_tmuxcmd" \
+					-f "${_tmuxconf}" \
+					-S "$_tmuxsock" \
+				   	send-keys ENTER "$__param" ENTER
 			done
+						 
+			(( DOATTACH > 0 )) &&\
+			   	"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" attach -r
 			;;
 		
 		update )
@@ -1026,8 +1037,8 @@ function main () {
 			shift; shift
 			
 			for _secarg; do
-				# Regex to match the following cases: x:y, or x1:y1-x2:y2
-				# while supporting negatives.
+				# Regex to match the following cases: x:y, or 
+				# x1:y1-x2:y2 while supporting negatives.
 				[[ "$_secarg" =~ ${_regex_sector_arg} ]] ||\
 					die "Invalid Sector Parameter: <${_secarg}>"
 			done
@@ -1046,45 +1057,64 @@ function main () {
 		--help | help | -h )
 			cat << _EOF_
 Avorion Commander v${CMDVERS}
-Usage: ${CMDNAME} <command> <optons> <parameters>
+Usage: ${CMDNAME} <command> <options> <parameters>
+
+Options:
+	--allow-screen
+		Permit the usage of commands that would normally prevent
+		execution upon detection of an active (and attached) local
+		screen or tmux session.
+
+	--debug
+		Output various debug output to stdout when given
+
+	--attach
+		Attempt to attach to an instance following processing
+		the primary command given. For use with "$CMDNAME exec"
+
+	--cron
+		Suppress stdout and assume yes to all user prompts. For use with
+		cronjobs. 
 
 Commands:
 	showinstances --instances -I
+		${_grn}${CMDNAME} <showinstances|--instances|-I>${_clr}
 		Display a listing of all Avorion/Steam instances
 
 	help --help -h
+		${_grn}${CMDNAME} <help|--help|-h>${_clr}
 		This help text
 	
 	usage --usage -u
+		${_grn}${CMDNAME} <usage|--usage|-u>${_clr}
 		Print the usage text
 	
 	version --version -V
+		${_grn}${CMDNAME} <version|--version|-V>${_clr}
 		Print versioning information
 	
 	start
-		Start the given Avorion instance
 		${_grn}${CMDNAME} start <instance>${_clr}
+		Start the given Avorion instance
 	
 	restart
-		Restart the given instance
 		${_grn}${CMDNAME} restart <instance>${_clr}
+		Restart the given instance
 	
 	stop
-		Stop the given instance. Unlike when used in game, this will prevent
-		the game from restarting following the 30 second window. Use this when
-		configuration changes need to be made. Alternatively, use ${_grn}config${_clr}
-		instead.
 		${_grn}${CMDNAME} stop <instance>${_clr}
+		Stop the given instance. Unlike when used in game, this will
+		prevent the game from restarting following the 30 second window.
+		Use this when configuration changes need to be made.
 	
 	exec
-		Pass the given commands into the instance server session.
 		${_grn}${CMDNAME} exec <instance> <commands>${_clr}
-		${_red}WARNING:${_clr} Unfinished/Untested and may be buggy, please dont use this for large Lua scripts commands until further tested.
-	
+		Pass the given commands into the instance server session.
+		
 	config
-		Edit the specified configuration file for the Avorion instance given.
 		${_grn}${CMDNAME} config <instance> <file>${_clr}
-		${_red}WARNING:${_clr} Use this at your own risk. This feature is still under development and may be scrapped
+		Edit the specified configuration file for the Avorion instance
+		given.
 		
 		Avorion Config Files:
 			server.ini
@@ -1095,15 +1125,19 @@ Commands:
 			ipblacklist.txt
 			group-whitelist.txt
 	
+		${_red}WARNING:${_clr} Use this at your own risk. This feature
+		is still under development and may be scrapped
+
 	resetsectors
-		Reset the given sectors or range of sectors.
 		${_grn}${CMDNAME} resetsectors <instance> <x:y, ...>${_clr}
 		${_grn}${CMDNAME} resetsectors <instance> <x:x-y:y>${_clr}
-		${_yel}This function is a work-in-progress!${_clr}
+		Reset the given sectors or range of sectors.
 
 	update
-		Force a game update. Not usually necessary as simply restarting the server
-		should accomplish this.
+		${_grn}${CMDNAME} update ${_clr}
+		Force a server update to the latest version. Also prompts the
+		user to check for mod version conflicts if any modded instances
+		are found.
 _EOF_
 			exit 0
 			;;
