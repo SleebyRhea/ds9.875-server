@@ -845,27 +845,41 @@ function __perform_config_edits () {
 #	instances. Then, print them (formatted) to the screen
 #	and exit
 function __show_service_instances () {
+	local __inst __dir
+	local __padlimit=70
+	local __pad="$(printf '%*s' "$__padlimit")"
+	local __padlength=60
+	local __stron=ONLINE
+	local __stroff=OFFLINE
+	local __strstat=Status
+	local __strinst=Instance
+	local __strserv __status __color
+
 	if ! (( "$(find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' -printf '.' | wc -c)" > 0 )); then
 		echo "No service instances running"
 		exit 1
 	fi
 
-	echo "${_bld}${_wht}Avorion Instances${_clr}"
+	printf "${_bld}${_wht}Avorion Commander v%s\n\n" "$CMDVERS" 
+	printf "${__strinst}%*.*s%s${_clr}\n" 0 $(( __padlength - ${#__strinst} )) \
+		"$__pad" \
+		"${__strstat}"
 
-	find "${AVORION_SERVICEDIR}/sockets" -name '*.sock' -printf '%f\n' | sort | while read -r _sock; do
-		local _instance="${_sock%%.sock*}"
-	
-		if systemctl list-units 'avorion@*' 2>&1 | grep -q "^avorion@${_instance}.service " >/dev/null 2>&1 ; then
-			systemctl status --no-pager avorion@"${_instance}" >/dev/null 2>&1 \
-				&& echo "${_instance} (avorion@${_instance}) -- ${_grn}Online${_clr}" \
-				|| echo "${_instance} (avorion@${_instance}) -- ${_red}Offline${_clr}"
+	find "${AVORION_SERVICEDIR}"/* -maxdepth 1 -name 'server.ini' -printf '%h\n' | while read -r __dir; do
+		__inst="$(basename "$__dir")"
+		__strserv="avorion@${__inst}.service:"
+
+		if systemctl status --no-pager avorion@"$__inst".service >/dev/null 2>&1; then
+			__status="ONLINE"
+			__color="$_grn"
 		else
-			if [[ -f "/etc/systemd/system/${_instance}.service" ]]; then
-				systemctl status --no-pager "${_instance}" >/dev/null 2>&1 \
-					&& echo "${_instance} -- ${_grn}Online${_clr}" \
-					|| echo "${_instance} -- ${_red}Offline${_clr}"
-			fi
+			__status="OFFLINE"
+			__color="$_red"
 		fi
+		
+		printf "${_bld}${_wht}${__strserv}"
+		printf '%*.*s' 0 $(( __padlength - ${#__strserv} )) "$__pad"
+		printf "${_clr}${__color}${__status}${_clr}\n"
 	done
 }
 
