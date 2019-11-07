@@ -209,7 +209,7 @@ function __set_globals () {
 }
 
 function __start_avorion_instance () {
-	local _prompt="Are you certain you wish to start ${_grn}$1${_clr}?"
+	local _prompt
 	local _noout=0
 	local _noprompt=0
 
@@ -231,6 +231,7 @@ function __start_avorion_instance () {
 	local _sess="$1"
 	_sess="${_sess%%.service}"
 	_sess="${_sess##avorion@}"
+	_prompt="Are you certain you wish to start ${_grn}${_sess}${_clr}?"
 
 	if ! systemctl status --no-pager avorion@"$_sess".service >/dev/null 2<&1; then
 		if  (( _noout > 0 )) || (( _noprompt > 0 )) || yesno "$_prompt"; then
@@ -848,7 +849,7 @@ function __show_service_instances () {
 	local __inst __dir
 	local __padlimit=70
 	local __pad="$(printf '%*s' "$__padlimit")"
-	local __padlength=60
+	local __padlength=40
 	local __stron=ONLINE
 	local __stroff=OFFLINE
 	local __strstat=Status
@@ -867,7 +868,7 @@ function __show_service_instances () {
 
 	find "${AVORION_SERVICEDIR}"/* -maxdepth 1 -name 'server.ini' -printf '%h\n' | while read -r __dir; do
 		__inst="$(basename "$__dir")"
-		__strserv="avorion@${__inst}.service:"
+		__strserv="[Avorion] ${__inst}:"
 
 		if systemctl status --no-pager avorion@"$__inst".service >/dev/null 2>&1; then
 			__status="ONLINE"
