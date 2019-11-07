@@ -326,7 +326,7 @@ function __check_incompatible_modlist () {
 	declare -A __mod_data __modded_insts
 	local __avorion_version_string __instdir __modlist __pass __inst_comma __warn
 	local __curmaxverstring __newmaxverstring __curminverstring __newminverstring
-	local __minstring __maxstring __verbose_version_checks __fail_count
+	local __minstring __maxstring __verbose_version_checks __fail_count __color
 	local __verbose_version_checks __newinstlist __curinstlist
 
 	__warn=''
@@ -340,14 +340,14 @@ function __check_incompatible_modlist () {
 		# do not permit execution to continue on directories
 		# that contain special characters. 
 		if [[ "$__instdir" =~ [^a-zA-Z0-9\/] ]]; then
-			dbgsay "Found bad dir: <$__instdir>"
+			dbgsay ">> Found bad dir: <$__instdir>"
 			continue
 		fi
 
 		## No point in attempting to operate on instances
 		## without any mods downloaded.
 		if [[ ! -d "${__instdir}/workshop/content/445220/" ]]; then
-			dbgsay "No workshop content directory found <${__instdir}/workshop/content/445220/>"
+			dbgsay ">> No workshop content directory found <${__instdir}/workshop/content/445220/>"
 			continue
 		fi
 
@@ -355,17 +355,17 @@ function __check_incompatible_modlist () {
 		__modded_insts["$( basename "$__instdir" )"]=PASS
 	done <<< "$( find "$AVORION_SERVICEDIR" -maxdepth 2 -type f -name modconfig.lua -printf '%h\n' 2>/dev/null )"
 
-	echo "Searching for modded instances..."
+	printf "${__f_white}Searching for modded instances...Found ${#__modded_insts[@]}\n"
 	for _inst in "${!__modded_insts[@]}"; do
-		printf '>> Found: <%s>\n' "$_inst"
+		printf "${__f_lgray}>> Found: <%s>${__t_clear}\n" "$_inst"
 	done
 
 	if (( ${#__modded_insts[@]} < 1 )); then
-		echo 'No modded instances found.'
+		printf "${__f_lgray}>> No modded instances found.${__t_clear}\n"
 		return 0
 	fi
 
-	printf "\nGathering data for version checking..."
+	printf "\n${__f_white}Gathering data for version checking...${__t_clear}"
 
 	dbgsay ""
 	## Gather mod information from all of the instances currently present.
@@ -389,7 +389,7 @@ function __check_incompatible_modlist () {
 			__inst_comma=','
 
 			if [[ ! "$__modid" =~ ^[0-9][0-9]*$ ]]; then
-				 say "	Incorrect MODID found in __check_incompatible_mods: <$__modid>"
+				 dbgsay ">>	Incorrect MODID found in __check_incompatible_mods: <$__modid>"
 				 continue
 			fi
 
@@ -399,7 +399,7 @@ function __check_incompatible_modlist () {
 			##		2. Min Version (The highest min version found in any instance dir)
 			##		3. Instance List (list of instances that have this mod
 			if [[ ! "${__mod_data["$__modid"]}" =~ ^([^:]*):([^:]*):([^:]*)$ ]]; then
-				dbgsay "Generating new data for $__modid"
+				dbgsay ">> Generating new data for ${__modid}"
 				__mod_data["$__modid"]='::'
 			fi
 			
@@ -442,11 +442,11 @@ function __check_incompatible_modlist () {
 			fi
 
 			__mod_data["$__modid"]="${__curmaxverstring}:${__curminverstring}:${__newinstlist}"
-			dbgsay "Data Collated for <$__modid>: ${__mod_data["$__modid"]//:/ }"
+			dbgsay ">> Data Collated for <$__modid>: ${__mod_data["$__modid"]//:/ }"
 		done <<< "$__modlist"
 	done
 	
-	echo "Ready"
+	printf "${__f_white}Ready\n"
 
 	if yesno "Would you like verbose output?"; then
 		__verbose_version_checks=1
@@ -460,11 +460,11 @@ function __check_incompatible_modlist () {
 
 		printf '' >"$TMP_FILE"
 
-		printf 'Checking Workshop Mod <%s>: ' "$__modid"
+		printf "${__f_lgray}>> Checking Workshop Mod <%s>:${__t_clear} " "$__modid"
 
 		if [[ ! "${__mod_data["$__modid"]}" =~ ^([^:]*):([^:]*):([^:]*)$ ]]; then
 			(( __fail_count++ ))
-			printf "${__f_red}ERROR (SKIPPING)${__t_clear}\n\tBad mod data string: <%s>" "${__mod_data["$__modid"]}"
+			printf "${__f_lgray}>> ${__t_clear}${__f_red}ERROR (SKIPPING)${__t_clear}\n\t${__f_red}Bad mod data string: <%s>${__t_clear}\n" "${__mod_data["$__modid"]}"
 			continue
 		fi
 
@@ -487,25 +487,33 @@ function __check_incompatible_modlist () {
 		fi
 
 		if (( __pass < 1 )); then
-			printf "${__f_red}%s${__t_clear}\n" "FAIL" 
+			printf "${__f_lred}%s${__t_clear}\n" "FAIL" 
 			(( __fail_count++ ))
 			for __inst in ${__inst_list//,/ }; do
 				__modded_insts[$__inst]=FAIL
-				printf '\t%s\n' "${AVORION_SERVICEDIR}/${__inst}/workshop/content/445220/${__modid}"
+				printf "${__f_lgray}\t%s\n" "${AVORION_SERVICEDIR}/${__inst}/workshop/content/445220/${__modid}"
 			done
 		else
-			printf "${__f_green}%s${__t_clear}\n" 'PASS'
+			printf "${__f_lgreen}%s${__t_clear}\n" 'PASS'
 		fi
 
+		local __esc=$(printf '\033')
 		## If our temp file isn't 0 bytes, output it
-		(( $(wc -c "$TMP_FILE" | cut -d' ' -f 1) > 0 )) &&  sed 's,.*,\t&,' "$TMP_FILE"
+		if (( $(wc -c "$TMP_FILE" | cut -d' ' -f 1) > 0 )); then
+			sed "s,.*,${__esc}[0;37m>> ${__esc}[1;33m&${__esc}[0m," "$TMP_FILE"
+			printf '\n'
+		fi
 	done
 
-	printf '\nComplete, %s/%s passed version checks. Final instance status:\n' \
+	printf "${__f_white}\nComplete, %s/%s passed version checks. Final instance status:${__t_clear}\n" \
 		"$(( ${#__mod_data[@]} - __fail_count ))" "${#__mod_data[@]}"
 
 	for __inst in "${!__modded_insts[@]}"; do
-		printf '>> %s: %s\n' "$__inst" "${__modded_insts["$__inst"]}"
+		[[ "${__modded_insts["$__inst"]}" == 'PASS' ]] &&\
+			__color="$__f_lgreen" ||\
+			__color="$__f_lred"
+		printf "${__f_lgray}>> %s:${__t_clear} ${__color}%s${__t_clear}\n" \
+			"$__inst" "${__modded_insts["$__inst"]}"
 	done
 
 	return "$__fail_count"
@@ -520,7 +528,7 @@ function __check_incompatible_modlist () {
 #	present on the system.
 function __perform_update () {
 	local -a _units
-	local _inst _steamcmd _updatedir _failed _instdir
+	local _inst _steamcmd _updatedir _failed _instdir __x
 	local __newversion __oldversion __oldgrp __oldusr __oldhome
 
 	_updatedir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
@@ -550,23 +558,23 @@ function __perform_update () {
 
 	sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" -n touch /tmp/avorion/updatingavorion.lock ||\
 		die "Unable to create avorion lockfile! Check /tmp usage." &&\
-		echo "Updates locked."
+		printf "${__f_white}Updates locked.${__t_clear}\n"
 
 	# Make sure that the update lock is removed following this
 	# scripts end
-	trap 'sudo -n -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" rm /tmp/avorion/updatingavorion.lock && echo "Updates unlocked" || echo "Failed to unlock updates"; exit 0' EXIT INT TERM
+	trap 'sudo -n -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" rm /tmp/avorion/updatingavorion.lock && printf "${__f_white}Updates unlocked${__t_clear}\n" || printf "${__f_red}Failed to unlock updates${__t_clear}"; exit 0' EXIT INT TERM
 
 	# Queries the systemd bus for active avorion@ instances and saves them
-	printf "Checking for active Avorion instances..."
+	printf "${__f_white}Checking for active Avorion instances...${__t_clear}"
 	_units=( $(systemctl list-units 'avorion@*' | grep '^[[:space:]]*avorion@[^[:space:]][^[:space:]]*.service[[:space:]][[:space:]]*loaded[[:space:]][[:space:]]*active[[:space:]][[:space:]]*running' | awk '{print $1}') )
-	printf 'Found %s\n' "${#_units[@]}"
-	
+	printf "${__f_white}Found %s\n${__t_clear}" "${#_units[@]}"
+
 	# If there were any active instances, stop them.
 	if (( "${#_units[@]}" > 0 )); then
 		for _inst in "${_units[@]}"; do
 			_inst="${_inst%%.service}"
 			_inst="${_inst##avorion@}"
-			printf '>> Pausing <%s>\n' "$_inst"
+			printf "${__f_lgray}>> Pausing <%s>${__t_clear}\n" "$_inst"
 			__stop_avorion_instance "${__inst}"
 		done
 	fi
@@ -579,6 +587,7 @@ function __perform_update () {
 	export GROUP="$AVORION_ADMIN_GRP"
 	export HOME="$AVORION_SERVICEDIR"
 
+	cd "$AVORION_SERVICEDIR" >/dev/null 2>&1 || die "Failed to cd into service directory <$AVORION_SERVICEDIR>"
 	# Download the latest version to: "${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	# ex: /srv/avorion/server_dir.updatefiles
 	#
@@ -589,11 +598,36 @@ function __perform_update () {
 	# NOTE2: Note also that - as this command uses sudo - the /etc/sudoers.d/avorion-ds9 file MUST be
 	#        be up to date and reflectant of the settings in /etc/avorionsettings.conf in order for
 	#        this to work correctly.
-	printf '\nRunning SteamCMD binary <%s>. Saving updates to <%s>\n' "$_steamcmd" "$_updatedir"
-	cd "$AVORION_SERVICEDIR" || die "Failed to cd into service directory <$AVORION_SERVICEDIR>"
-	if ! sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" -n "$_steamcmd" +login anonymous +force_install_dir "$_updatedir" +app_update "$AVORION_STEAMID" validate +exit; then
+	printf "\n${__f_white}Running SteamCMD binary <%s>.${__t_clear}\n" "$_steamcmd"
+
+	## Adjusted this lovely bit of voodoo here:
+	##	https://stackoverflow.com/questions/32910661/pretend-to-be-a-tty-in-bash-for-any-command
+	##
+	## This is required if we want to operate on the output of SteamCMD as if it detects that
+	## its stdout is NOT to a TTY/PTY (prompt), it will enable full-buffering which causes the
+	## update text to NOT appear until after the command is complete. This long and complicated
+	## bit of Bash basically tricks the command into thinking that its stdout is a *valid* 
+	## TTY.
+	## 
+	## THEN, we output that to the loop below that then prepends >> to any new output. Writup on
+	## how that works here:
+	##	https://superuser.com/questions/868496/how-do-i-prepend-a-string-to-program-output-without-waiting-for-the-whole-line
+	##
+	## All of this for fancy output.
+	script -qefc "sudo -u $AVORION_USER -g $AVORION_ADMIN_GRP -n $_steamcmd +login anonymous +force_install_dir $_updatedir +app_update $AVORION_STEAMID validate +exit" /dev/null | {
+		__x=1
+		while IFS= read -d'' -s -N 1 char; do
+			[[ -n "$__x" ]] && printf "${__f_lgray}>> "
+		  	printf "$char" 2>/dev/null
+		  	unset __x
+		  	[[ "$char" == $'\n' ]] && __x=1
+		done
+	}
+	
+	if (( PIPESTATUS[0] > 0 )); then
 		_failed=1
 	fi
+	printf "${__t_clear}"
 
 	## Revert stupid fix
 	export USER="$__oldusr"
@@ -610,9 +644,10 @@ function __perform_update () {
 	# Acquire the Avorion version of the updated binary
 	__newversion="$( "$_updatedir"/bin/AvorionServer --version | tr -dc '[0-9.\*]')"
 
-	echo
+	printf "${__f_white}\n"
 	if yesno "Would you like to check for incompatible mods?"; then
 		if ! __check_incompatible_modlist "$__newversion"; then
+			printf "${__f_white}"
 			if ! yesno "Incompatible mods found, would you still like to proceed?"; then
 				say "Removing update files and aborting..."
 				rm -rf "$_updatedir" >/dev/null
@@ -621,14 +656,14 @@ function __perform_update () {
 		fi
 	fi
 
-	echo
+	printf "${__t_clear}\n"
 	# If there is prior server data, move that to a backup, just in case.
 	if [[ -d "$_currentdir" ]]; then
 		__oldversion="$( "$_currentdir"/bin/AvorionServer --version | tr -dc '[0-9.\*]')"
 		if [[ -d "${_currentdir}.updatebak-${__oldversion}" ]]; then
 			rm -rf "${_currentdir}.updatebak-${__oldversion}" >/dev/null
 		fi
-		echo "Preserving old server version: <$__oldversion> as <${_currentdir}.updatebak-${__oldversion}>"
+		printf "${__f_white}Backing up old server version to <${_currentdir}.updatebak-${__oldversion}>${__t_clear}\n"
 		mv --strip-trailing-slashes -T "$_currentdir" "${_currentdir}.updatebak-${__oldversion}" >/dev/null 2>&1
 	fi
 
@@ -647,20 +682,22 @@ function __perform_update () {
 
 	# If any instances were up prior to the update, re-start them
 	if (( "${#_units[@]}" > 0 )); then
+		printf "${__f_white}Attempting to restart services${__t_clear}\n"
 		for _inst in "${_units[@]}"; do
 			_inst="${_inst%%.service}"
 			_inst="${_inst##avorion@}"
-			printf "Restarting <%s>..." "$_inst"
+			printf "${__f_lgray}>> Restarting <%s>...${__t_clear}" "$_inst"
 			if ! __start_avorion_instance --suppress-output "${_inst}"; then
 				(( _failed++ ))
-				printf "${__f_red}FAILED${__t_clear}\n"
+				printf "${__f_lred}FAILED${__t_clear}\n"
 				continue
 			fi
 
-			printf "${__f_green}SUCCESS${__t_clear}\n"
+			printf "${__f_lgreen}SUCCESS${__t_clear}\n"
 		done
 	fi
 
+	echo
 	if (( _failed > 0 )); then
 		echo "$_failed instance$(plural "$_failed") failed to start!"
 		exit 1
@@ -876,7 +913,7 @@ function __show_service_instances () {
 
 	## Padded output modified from StackExchange
 	## 		https://stackoverflow.com/questions/4409399/padding-characters-in-printf
-	printf "${__f_bold}${__f_white}Avorion Commander v%s\n\n" "$CMDVERS" 
+	printf "${__f_white}Avorion Commander v%s\n\n" "$CMDVERS" 
 	printf "${__strinst}%*.*s%s${__t_clear}\n" 0 $(( __padlength - ${#__strinst} )) \
 		"$__pad" \
 		"${__strstat}"
@@ -894,7 +931,7 @@ function __show_service_instances () {
 		fi
 		
 		## More formatted output
-		printf "${__f_bold}${__f_white}${__strserv}"
+		printf "${__f_white}${__strserv}"
 		printf '%*.*s' 0 $(( __padlength - ${#__strserv} )) "$__pad"
 		printf "${__t_clear}${__color}${__status}${__t_clear}\n"
 	done
@@ -1304,7 +1341,9 @@ function say () {
 #	return code 1
 function dbgsay () {
 	if (( "${VERBOSE}" > 0 )); then
-		say "$@"
+		for __arg; do
+			printf "${__f_yellow}%s${__t_clear}\n" "$__arg"
+		done
 	fi
 }
 
