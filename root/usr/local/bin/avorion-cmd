@@ -251,6 +251,8 @@ function __start_avorion_instance () {
 		fi
 	fi
 
+	(( _noout < 1 )) && printf 'Instance <%s> is already active.' "$_sess"
+
 	return 0
 }
 
