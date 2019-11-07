@@ -1,11 +1,10 @@
 #! /usr/bin/env bash
-
 if ! [ "$(id -u)" = 0 ]; then
 	echo "Please run this as root"
 	exit 1
 fi
 
-if ps faux | grep -q AvorionServer >/dev/null 2>&1; then
+if pgrep AvorionServer >/dev/null 2>&1; then
 	echo "Please make ensure Avorion is off and disabled"
 	exit 2
 fi
@@ -18,7 +17,7 @@ if ! [ -e working ] && ! [ -d working ]; then
 fi
 
 if ! [ -e backup ]; then
-	if ! mkdir working >/dev/null; then
+	if ! mkdir backup >/dev/null; then
 		echo "Failed to create 'working' directory"
 		exit 3
 	fi
@@ -40,12 +39,12 @@ if ! ( cd ./root >/dev/null 2>&1 ); then
 	exit 1
 fi
 
-install -m 644 etc/avorioncmd-tmux.conf /etc/avorioncmd-tmux.conf
-install -m 644 etc/avorionsettings.conf /etc/avorionsettings.conf
-install -m 644 etc/systemd/system/avorionservers.target /etc/systemd/system/avorionservers.target
-install -m 644 etc/systemd/system/avorion@.service /etc/systemd/system/avorion@.service
-install -m 0440 etc/sudoers.d/avorion-ds9 /etc/sudoers.d/avorion-ds9
-install -m 755 usr/local/bin/avorion-cmd /usr/local/bin/avorion-cmd
+install -m 644 ./root/etc/avorioncmd-tmux.conf /etc/avorioncmd-tmux.conf
+install -m 644 ./root/etc/avorionsettings.conf /etc/avorionsettings.conf
+install -m 644 ./root/etc/systemd/system/avorionservers.target /etc/systemd/system/avorionservers.target
+install -m 644 ./root/etc/systemd/system/avorion@.service /etc/systemd/system/avorion@.service
+install -m 0440 ./root/etc/sudoers.d/avorion-ds9 /etc/sudoers.d/avorion-ds9
+install -m 755 ./root/usr/local/bin/avorion-cmd /usr/local/bin/avorion-cmd
 
 source /etc/avorionsettings.conf
 if [ -z "$AVORION_SERVICEDIR" ] || [ -z "$AVORION_ADMIN_GRP" ] || [ -z "$AVORION_USER" ]; then
@@ -61,7 +60,7 @@ if ! [ -d "${AVORION_SERVICEDIR}/sockets" ]; then
 	mkdir "$AVORION_SERVICEDIR"
 fi
 
-echo "Setting permissions for <${AVORION_SERVICEDIR}>"
+echo "Setting permissions for <${AVORION_SERVICEDIR}>:"
 chown -R "$AVORION_USER":"$AVORION_ADMIN_GRP" "$AVORION_SERVICEDIR"
 __filesys="$(df "$AVORION_SERVICEDIR" 2>&1 | tail -n 1 | awk '{printf "%s",$1}')"
 if { echo "$__filesys" | grep -q 'type xfs' >/dev/null 2>&1; } || { echo "$__filesys" | grep -q acl >/dev/null 2>&1; }; then
@@ -70,3 +69,5 @@ if { echo "$__filesys" | grep -q 'type xfs' >/dev/null 2>&1; } || { echo "$__fil
 	setfacl -d -m u:"$AVORION_USER":rwX "$AVORION_SERVICEDIR"
 	setfacl -d -m g:"$AVORION_ADMIN_GRP":rwX "$AVORION_SERVICEDIR"
 fi
+
+echo 'Done. Make sure to set the ADMIN value in </etc/systemd/system/avorion@.service>'

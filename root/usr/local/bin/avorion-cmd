@@ -970,16 +970,13 @@ function main () {
 			;;
 		
 		exec )
-			__check_screen_tmux &&\
-				die "$CMDNAME $1 should not be run in a screen or tmux session"
-
 			__set_tmux_instance "$2" \
 				|| die "${__err_bad_inst} <$2>"
 
 			shift; shift
-			"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" send-keys ENTER "$@" ENTER \; attach -r ||\
-				exit 1 &&\
-				exit 0
+			for __command; do
+				"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" send-keys ENTER "$__command" ENTER
+			done
 			;;
 		
 		update )
