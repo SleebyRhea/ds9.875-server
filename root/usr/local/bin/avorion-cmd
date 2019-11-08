@@ -204,6 +204,7 @@ function __set_globals () {
 	readonly __f_purple='\033[0;35m' ## Purple
 	readonly __f_cyan='\033[0;36m' ## Cyan
 	readonly __f_lgray='\033[0;37m' ## Light Gray
+	readonly __esc=$(printf '\033')
 
 	readonly _tmuxconf=/etc/avorioncmd-tmux.conf
 	readonly _tmuxcmd="$(which tmux)"
@@ -497,7 +498,6 @@ function __check_incompatible_modlist () {
 			printf "${__f_lgreen}%s${__t_clear}\n" 'PASS'
 		fi
 
-		local __esc=$(printf '\033')
 		## If our temp file isn't 0 bytes, output it
 		if (( $(wc -c "$TMP_FILE" | cut -d' ' -f 1) > 0 )); then
 			sed "s,.*,${__esc}[0;37m>> ${__esc}[1;33m&${__esc}[0m," "$TMP_FILE"
@@ -561,9 +561,16 @@ function __perform_update () {
 		die "Unable to create avorion lockfile! Check /tmp usage." &&\
 		printf "${__f_white}Updates locked.${__t_clear}\n"
 
-	# Make sure that the update lock is removed following this
-	# scripts end
-	trap 'sudo -n -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" rm /tmp/avorion/updatingavorion.lock && printf "${__f_white}Updates unlocked${__t_clear}\n" || printf "${__f_red}Failed to unlock updates${__t_clear}"; exit 0' EXIT INT TERM
+	## Make sure that the update lock is removed following this
+	## scripts end. The `trap - EXIT TERM INT` is used here to
+	## prevent the exit inside the trap from tripping *another*
+	## trap run.
+	trap 'echo
+		trap - EXIT TERM INT
+		sudo -n -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" rm /tmp/avorion/updatingavorion.lock &&\
+			printf "${__f_white}Updates unlocked${__t_clear}\n" ||\
+			printf "${__f_red}Failed to unlock updates${__t_clear}\n"
+		exit $?' TERM EXIT INT 
 
 	# Queries the systemd bus for active avorion@ instances and saves them
 	printf "${__f_white}Checking for active Avorion instances...${__t_clear}"
@@ -601,32 +608,9 @@ function __perform_update () {
 	#        this to work correctly.
 	printf "\n${__f_white}Running SteamCMD binary <%s>.${__t_clear}\n" "$_steamcmd"
 
-	## Adjusted this lovely bit of voodoo here:
-	##	https://stackoverflow.com/questions/32910661/pretend-to-be-a-tty-in-bash-for-any-command
-	##
-	## This is required if we want to operate on the output of SteamCMD as if it detects that
-	## its stdout is NOT to a TTY/PTY (prompt), it will enable full-buffering which causes the
-	## update text to NOT appear until after the command is complete. This long and complicated
-	## bit of Bash basically tricks the command into thinking that its stdout is a *valid* 
-	## TTY.
-	## 
-	## THEN, we output that to the loop below that then prepends >> to any new output. Writup on
-	## how that works here:
-	##	https://superuser.com/questions/868496/how-do-i-prepend-a-string-to-program-output-without-waiting-for-the-whole-line
-	##
-	## All of this for fancy output.
 	__steamcmd_command_string="sudo -u $AVORION_USER -g $AVORION_ADMIN_GRP -n $_steamcmd +login anonymous +force_install_dir $_updatedir +app_update $AVORION_STEAMID validate +exit"
-	script -qefc "$__steamcmd_command_string" /dev/null | {
-		__x=1
-		while IFS= read -d'' -s -N 1 char; do
-			[[ -n "$__x" ]] && printf "${__f_lgray}>> "
-		  	printf "$char" 2>/dev/null
-		  	unset __x
-		  	[[ "$char" == $'\n' ]] && __x=1
-		done
-	}
-	
-	if (( PIPESTATUS[0] > 0 )); then
+	printf "${__f_lgray}"
+	if ! $__steamcmd_command_string; then
 		_failed=1
 	fi
 	printf "${__t_clear}"
@@ -699,9 +683,8 @@ function __perform_update () {
 		done
 	fi
 
-	echo
 	if (( _failed > 0 )); then
-		echo "$_failed instance$(plural "$_failed") failed to start!"
+		printf "\n$_failed instance$(plural "$_failed") failed to start!\n"
 		exit 1
 	fi
 
