@@ -7,6 +7,7 @@ VERBOSE=0
 NOSCREENCHECK=0
 VALIDCMDS='stop|start|restart|showinstances|view|attach|exec|update|resetsectors|usage|config'
 VALIDSWCHS='-I|-h|-u|--help|-V|--version'
+DOALL=0
 
 ## Used to prevent confirmation dialogues
 FORCE=0
@@ -205,6 +206,7 @@ function __set_globals () {
 	readonly __f_cyan='\033[0;36m' ## Cyan
 	readonly __f_lgray='\033[0;37m' ## Light Gray
 	readonly __esc=$(printf '\033')
+	readonly __unit_string='^[[:space:]]*avorion@[^[:space:]][^[:space:]]*.service[[:space:]][[:space:]]*loaded[[:space:]][[:space:]]*active[[:space:]][[:space:]]*running'
 
 	readonly _tmuxconf=/etc/avorioncmd-tmux.conf
 	readonly _tmuxcmd="$(which tmux)"
@@ -314,6 +316,25 @@ function __stop_avorion_instance () {
 	(( CRON < 1 )) && printf "Done.\n"
 
 	return 0
+}
+
+function __sendcmd_avorion_instance () {
+	local __inst="$1"
+
+	for __param; do
+		"$_tmuxcmd" \
+			-f "${_tmuxconf}" \
+			-S "$AVORION_SERVICEDIR/sockets/${1}.sock" \
+			send-keys ENTER "$__param" ENTER
+	done
+				 
+	## If +all is given we **really** dont want to attach
+	if (( DOATTACH > 0 && DOALL < 1 )); then
+		"$_tmuxcmd" \
+			-f "${_tmuxconf}" \
+			-S "$AVORION_SERVICEDIR/sockets/${1}.sock" \
+			attach -r
+	fi
 }
 
 function __restart_avorion_instance () {
@@ -953,6 +974,11 @@ function main () {
 			--allow-screen) NOSCREENCHECK=1; continue ;;
 			--cron) CRON=1; continue ;;
 			--attach) DOATTACH=1; continue ;;
+			+all) 
+				DOALL=1;
+				__units=( $(systemctl list-units 'avorion@*' | grep "$__unit_string" | awk '{print $1}') )
+				continue
+				;;
 		esac
 
 		set -- "$@" "${_arg}"
@@ -975,21 +1001,45 @@ function main () {
 			;;
 
 		stop )
-			__set_tmux_instance "$2" ||\
-				die "${__err_bad_inst} <$2>"
+			if (( DOALL < 1 )); then
+				__set_tmux_instance "$2" ||\
+					die "${__err_bad_inst} <$2>"
 
-			__stop_avorion_instance "$_tmuxsess" ||\
-				exit 1 &&\
-				exit 0
+				__stop_avorion_instance "$_tmuxsess" &&\
+					exit 0
+
+				exit 1
+			fi
+			
+			# If there were any active instances, stop them.
+			if (( "${#__units[@]}" > 0 )); then
+				for __inst in "${__units[@]}"; do
+					__inst="${__inst%%.service}"
+					__inst="${__inst##avorion@}"
+					__stop_avorion_instance "${__inst}"
+				done
+			fi
 			;;
 
 		restart )
-			__set_tmux_instance "$2" ||\
-				die "${__err_bad_inst} <$2>"
+			if (( DOALL < 1 )); then
+				__set_tmux_instance "$2" ||\
+					die "${__err_bad_inst} <$2>"
 
-			__restart_avorion_instance "$_tmuxsess" ||\
-				exit 1 &&\
-				exit 0
+				__restart_avorion_instance "$_tmuxsess" &&\
+					exit 0
+
+				exit 1
+			fi
+			
+			# If there were any active instances, stop them.
+			if (( "${#__units[@]}" > 0 )); then
+				for __inst in "${__units[@]}"; do
+					__inst="${__inst%%.service}"
+					__inst="${__inst##avorion@}"
+					__restart_avorion_instance "${__inst}"
+				done
+			fi
 			;;
 		
 		view | attach )
@@ -1005,24 +1055,27 @@ function main () {
 			;;
 		
 		exec )
-			__set_tmux_instance "$2" \
-				|| die "${__err_bad_inst} <$2>"
-			
-			if (( DOATTACH > 0 )); then
-				__check_screen_tmux &&\
-					die "$CMDNAME exec should not be run in a screen or tmux session when --attach is used (use --allow-screen to force enable)"
-			fi
+				if (( )); then
+					__set_tmux_instance "$2" \
+						|| die "${__err_bad_inst} <$2>"
+					
+					if (( DOATTACH > 0 )); then
+						__check_screen_tmux &&\
+							die "$CMDNAME exec should not be run in a screen or tmux session when --attach is used (use --allow-screen to force enable)"
+					fi
 
-			shift; shift
-			for __param; do
-				"$_tmuxcmd" \
-					-f "${_tmuxconf}" \
-					-S "$_tmuxsock" \
-				   	send-keys ENTER "$__param" ENTER
-			done
-						 
-			(( DOATTACH > 0 )) &&\
-			   	"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" attach -r
+					shift; shift
+					__sendcmd_avorion_instance "$@"
+				fi
+
+				# If there were any active instances, stop them.
+				if (( "${#__units[@]}" > 0 )); then
+					for __inst in "${__units[@]}"; do
+						__inst="${__inst%%.service}"
+						__inst="${__inst##avorion@}"
+						__sendcmd_avorion_instance "$@"
+					done
+				fi
 			;;
 		
 		update )
@@ -1033,17 +1086,6 @@ function main () {
 		
 		showinstances | -I )
 			__show_service_instances ||\
-				exit 1 &&\
-				exit 0
-			;;
-
-		backup )
-			die "Not yet implemented"
-
-			__get_instance_dir ||\
-				die "${__err_bad_inst} <$2>"
-
-			__perform_backup "$_instdir" ||\
 				exit 1 &&\
 				exit 0
 			;;
@@ -1110,6 +1152,10 @@ Options:
 	--cron
 		Suppress stdout and assume yes to all user prompts. For use with
 		cronjobs. 
+	
+	+all
+		Run command on **all** instances that a given command is able to
+		operate on. For now, only allowed on stop, restart, and exec.
 
 Commands:
 	showinstances --instances -I
