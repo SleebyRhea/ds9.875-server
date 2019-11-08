@@ -8,6 +8,8 @@ do
 	local __vanillaOnShutdown = onShutDown
 	local __vanillaOnStartup = onStartUp
 
+	local __gamemetrics = include(gamemetrics-lib.lua)
+
 	function onStartUp()
 		__vanillaOnStartup()
 		
@@ -38,23 +40,18 @@ do
 				__exportTime=0
 				
 				local __serv = Server()
+				local __metrics = ""
 				local __servname = __serv.name
 				local __plrcnt = __serv.players
 				local __maxplr = __serv.maxPlayers
 				local __time = os.time(os.date("!*t"))
-				local __f = io.open(__metricsFile, "w+")
+				--local __f = io.open(__metricsFile, "w+")
 				
 				if type(__f) == "nil" then
 					print("[${mod}] Unable to update metrics export file! File: <${file}>"%_T % {mod=__modName, file=__metricsFile})
 				else
-					print("[${mod}] Writing out metrics..."%_T % {mod=__modName} )
-					__f:seek("set")
-					__f:write('#HELP avorion_playercount Playercount for ${servname}\n'%_T % {servname=__servname} )
-					__f:write('#TYPE avorion_playercount counter\n')
-					__f:write('avorion_playercount { server="${servname}", count="online" } ${count} ${time}\n'%_T % {servname=__servname, count=__plrcnt, time=__time} )
-					__f:write('avorion_playercount { server="${servname}", count="max" } ${count} ${time}\n'%_T % {servname=__servname, count=__maxplr, time=__time} )
-					__f:close()
-					print("[${mod}] Finished writing metrics."%_T % {mod=__modName} )
+					print("[${mod}] Calculating metrics..."%_T % {mod=__modName} )
+					__gamemetrics.update(__time)
 				end
 			end
 		end
