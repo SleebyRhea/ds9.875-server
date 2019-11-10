@@ -185,26 +185,33 @@ function __set_tmux_instance () {
 #	Set various global values, and declare
 #	other unset globals
 function __set_globals () {
-	declare _tmuxsess _tmuxsock _instdir
+	declare _tmuxsess _tmuxsock _instdir __allowed
 	
-	readonly __t_clear='\033[0m' ## Clear
+	## Universal
+	readonly __t_clear='\033[0m' ## Clear Text Props
+	
+	## Foreground Codes
 	readonly __f_bold='\033[1m'
-	readonly __f_dgray='\033[1;30m' ## Dark Gray
-	readonly __f_lred='\033[1;31m' ## Light Red
-	readonly __f_lgreen='\033[1;32m' ## Light Green
-	readonly __f_yellow='\033[1;33m' ## Yellow
-	readonly __f_lblue='\033[1;34m' ## Light Blue
+	readonly __f_dgray='\033[1;30m'   ## Dark Gray
+	readonly __f_lred='\033[1;31m'    ## Light Red
+	readonly __f_lgreen='\033[1;32m'  ## Light Green
+	readonly __f_yellow='\033[1;33m'  ## Yellow
+	readonly __f_lblue='\033[1;34m'   ## Light Blue
 	readonly __f_lpurple='\033[1;35m' ## Light Purple
-	readonly __f_lcyan='\033[1;36m' ## Light Cyan
-	readonly __f_white='\033[1;37m' ## White
-	readonly __f_black='\033[0;30m' ## Black
-	readonly __f_red='\033[0;31m' ## Red
-	readonly __f_green='\033[0;32m' ## Green
-	readonly __f_orange='\033[0;33m' ## Brown/Orange
-	readonly __f_blue='\033[0;34m' ## Blue
-	readonly __f_purple='\033[0;35m' ## Purple
-	readonly __f_cyan='\033[0;36m' ## Cyan
-	readonly __f_lgray='\033[0;37m' ## Light Gray
+	readonly __f_lcyan='\033[1;36m'   ## Light Cyan
+	readonly __f_white='\033[1;37m'   ## White
+	readonly __f_black='\033[0;30m'   ## Black
+	readonly __f_red='\033[0;31m'     ## Red
+	readonly __f_green='\033[0;32m'   ## Green
+	readonly __f_orange='\033[0;33m'  ## Brown/Orange
+	readonly __f_blue='\033[0;34m'    ## Blue
+	readonly __f_purple='\033[0;35m'  ## Purple
+	readonly __f_cyan='\033[0;36m'    ## Cyan
+	readonly __f_lgray='\033[0;37m'   ## Light Gray
+
+	## Background Codes
+	readonly __b_white='\u001b[47m'   ## White
+
 	readonly __esc=$(printf '\033')
 	readonly __unit_string='^[[:space:]]*avorion@[^[:space:]][^[:space:]]*.service[[:space:]][[:space:]]*loaded[[:space:]][[:space:]]*active[[:space:]][[:space:]]*running'
 
@@ -259,6 +266,8 @@ function __start_avorion_instance () {
 		
 			if (( _noout < 1 )); then
 				printf "${__f_red}%s${__t_clear}\n" 'Fail'
+				printf "\t\tEither the service is broken, or the instance you are starting is not configured\n"
+				printf "\t\tIf this is intentional, and you have permissions, use sudo."
 			else
 				printf 'Failed to start avorion@%s.service\n' "${_sess}"
 			fi
@@ -298,33 +307,37 @@ function __stop_avorion_instance () {
 
 	## Continue looping while the /proc/$_pid/cmdline points to the correct executable
 	while [[ -d "/proc/$_pid" ]] && grep -q "$AVORION_SERVICEDIR/$AVORION_BINDIR/bin/AvorionServer --galaxy-name ${1} " "/proc/$_pid/cmdline" >/dev/null 2>&1; do
-		if ((_time < 1000 )); then
+		(( _time++ ))
+		if (( _time < 1000 )); then
 			(( CRON < 1 )) && printf '.'
-			sleep 1
+			sleep 1s
 		else
-			printf '\nInstance <%s> seems to be hanging, forcefully shutting down. This make take a moment.' "$1"
+			printf '\nInstance <%s> seems to be hanging, forcefully shutting down. This make take a moment..' "$1"
 			if ! sudo -n systemctl stop avorion@"$1" >/dev/null 2>&1; then
 				printf '%s\n' "Unable to stop <$1>. Killing."
 				sudo -n systemctl kill avorion@"$1" >/dev/null 2>&1
 				return 1
 			fi
 		fi
-		((_time++))
 	done
 
-	sudo -n systemctl stop avorion@"$1" >/dev/null 2>&1
+	if ! sudo -n systemctl stop avorion@"$1" >/dev/null; then
+		printf "Cannot fully stop! (Do you have permission to?)\n"
+		printf '"\save + \stop" has been sent, but instance will reboot due to lack of permissions.\n'
+	fi
 	(( CRON < 1 )) && printf "Done.\n"
 
 	return 0
 }
 
 function __sendcmd_avorion_instance () {
-	local __inst="$1"
+	[[ -z "$__inst" ]] &&\
+		die "Please supply a valid instance: <$__inst>"
 
 	for __param; do
 		"$_tmuxcmd" \
 			-f "${_tmuxconf}" \
-			-S "$AVORION_SERVICEDIR/sockets/${1}.sock" \
+			-S "$AVORION_SERVICEDIR/sockets/${__inst}.sock" \
 			send-keys ENTER "$__param" ENTER
 	done
 				 
@@ -332,7 +345,7 @@ function __sendcmd_avorion_instance () {
 	if (( DOATTACH > 0 && DOALL < 1 )); then
 		"$_tmuxcmd" \
 			-f "${_tmuxconf}" \
-			-S "$AVORION_SERVICEDIR/sockets/${1}.sock" \
+			-S "$AVORION_SERVICEDIR/sockets/${__inst}.sock" \
 			attach -r
 	fi
 }
@@ -595,7 +608,7 @@ function __perform_update () {
 
 	# Queries the systemd bus for active avorion@ instances and saves them
 	printf "${__f_white}Checking for active Avorion instances...${__t_clear}"
-	_units=( $(systemctl list-units 'avorion@*' | grep '^[[:space:]]*avorion@[^[:space:]][^[:space:]]*.service[[:space:]][[:space:]]*loaded[[:space:]][[:space:]]*active[[:space:]][[:space:]]*running' | awk '{print $1}') )
+	_units=( $(systemctl list-units 'avorion@*' | grep "$__unit_string" | awk '{print $1}') )
 	printf "${__f_white}Found %s\n${__t_clear}" "${#_units[@]}"
 
 	# If there were any active instances, stop them.
@@ -905,9 +918,9 @@ function __perform_config_edits () {
 #	and exit
 function __show_service_instances () {
 	local __inst __dir
-	local __padlimit=70
+	local __padlimit=80
 	local __pad="$(printf '%*s' "$__padlimit")"
-	local __padlength=40
+	local __padlength=30
 	local __strstat=Status
 	local __strinst=Instance
 	local __strserv __status __color
@@ -920,26 +933,30 @@ function __show_service_instances () {
 	## Padded output modified from StackExchange
 	## 		https://stackoverflow.com/questions/4409399/padding-characters-in-printf
 	printf "${__f_white}Avorion Commander v%s\n\n" "$CMDVERS" 
-	printf "${__strinst}%*.*s%s${__t_clear}\n" 0 $(( __padlength - ${#__strinst} )) \
-		"$__pad" \
+	printf "${__f_white}Service Location: %s\n" "$AVORION_SERVICEDIR/<instance>"
+	printf "${__f_white}Backups Location: %s\n" "$AVORION_BAKDIR"
+	printf '\n'
+	printf "${__f_black}${__b_white}${__strinst}%*.*s%s     ${__t_clear}\n" 0 $(( __padlength - ${#__strinst} )) \
+		"${__pad}" \
 		"${__strstat}"
 
 	find "${AVORION_SERVICEDIR}"/* -maxdepth 1 -name 'server.ini' -printf '%h\n' | while read -r __dir; do
 		__inst="$(basename "$__dir")"
-		__strserv="[Avorion] ${__inst}:"
+		__strserv="${__inst}:"
 
 		if systemctl status --no-pager avorion@"$__inst".service >/dev/null 2>&1; then
-			__status="ONLINE"
+			__status="ONLINE "
 			__color="$__f_green"
 		else
 			__status="OFFLINE"
 			__color="$__f_red"
 		fi
+		__status="[ ${__color}${__status}${__t_clear} ]"
 		
 		## More formatted output
 		printf "${__f_white}${__strserv}"
 		printf '%*.*s' 0 $(( __padlength - ${#__strserv} )) "$__pad"
-		printf "${__t_clear}${__color}${__status}${__t_clear}\n"
+		printf "${__t_clear}${__status}%s${__t_clear}\n"
 	done
 }
 
@@ -963,6 +980,10 @@ function main () {
 	(( $# < 1 )) &&\
 		die "Usage: $CMDNAME <options> <parameters>"
 	
+	__validate_setting_conf && source /etc/avorionsettings.conf
+	__assert_valid_execution
+	__set_globals
+
 	# Check for the existence of the given strings in the positional
 	# parameter list. If they exist, remove it from said parameter
 	# list and continue execution after setting the requisite vars.
@@ -976,7 +997,9 @@ function main () {
 			--attach) DOATTACH=1; continue ;;
 			+all) 
 				DOALL=1;
-				__units=( $(systemctl list-units 'avorion@*' | grep "$__unit_string" | awk '{print $1}') )
+				__units=( $(systemctl list-units 'avorion@*' --no-pager | grep -o "$__unit_string" | awk '{print $1}') )
+				dbgsay "$__units"
+				__allowed='stop|restart|exec:is not usable with <+all>'
 				continue
 				;;
 		esac
@@ -984,11 +1007,13 @@ function main () {
 		set -- "$@" "${_arg}"
 	done
 
-	__validate_setting_conf && source /etc/avorionsettings.conf
-	__assert_valid_execution
-	__set_globals
-
 	local __err_bad_inst='Invalid instance passed:'
+
+	if [[ -n "$__allowed" ]]; then
+		if [[ ! "$1" =~ ^${__allowed%%:*}$ ]]; then
+			die "<$1> ${__allowed##*:}"
+		fi
+	fi
 
 	case "$1" in
 		start )
@@ -1055,7 +1080,7 @@ function main () {
 			;;
 		
 		exec )
-				if (( )); then
+				if (( DOALL < 1 )); then
 					__set_tmux_instance "$2" \
 						|| die "${__err_bad_inst} <$2>"
 					
@@ -1066,16 +1091,20 @@ function main () {
 
 					shift; shift
 					__sendcmd_avorion_instance "$@"
+					exit 0
 				fi
 
-				# If there were any active instances, stop them.
+				shift
+				## Send to any active instances
 				if (( "${#__units[@]}" > 0 )); then
 					for __inst in "${__units[@]}"; do
 						__inst="${__inst%%.service}"
 						__inst="${__inst##avorion@}"
+						__set_tmux_instance "$__inst"
 						__sendcmd_avorion_instance "$@"
 					done
 				fi
+				exit 0
 			;;
 		
 		update )
@@ -1084,7 +1113,7 @@ function main () {
 				exit 0
 			;;
 		
-		showinstances | -I )
+		showinstances | -I | status)
 			__show_service_instances ||\
 				exit 1 &&\
 				exit 0
