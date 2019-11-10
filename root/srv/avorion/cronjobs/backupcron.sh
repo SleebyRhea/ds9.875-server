@@ -1,61 +1,102 @@
 #! /usr/bin/env bash
 
-AVORIONCMD=/usr/local/bin/avorion-cmd
+declare __AVORIONCMD=/usr/local/bin/avorion-cmd
+declare __LASTBACKUP=''
+declare __LOGFILE=''
+declare __SKIPBACKUP=0
+declare __ETIME="$(date +%s)"
 
 function main() {
 	__validate_setting_conf &&\
 		source /etc/avorionsettings.conf
 	
+	if [[ -f "$AVORION_BAKDIR/lastfullbackup" ]]; then
+		__LASTBACKUP="$(<"$AVORION_BAKDIR/lastfullbackup" | tr -d '\n')"
+		if (( $((__ETIME - __LASTBACKUP)) < 86400 )); then
+			__SKIPBACKUP=1
+		fi
+	fi
+
 	local __active_units=( $(getactive) )
 	local __failed=0
+	local __incrdir="${AVORION_BAKDIR}/incremental"
+	local __backupdir="${AVORION_BAKDIR}/compressed"
+	local __logdir="${AVORION_BAKDIR}/logs"
+	local __backup_file="${__backupdir}/backup-${__ETIME}.tar.gz"
+	local __LOGFILE="$__logdir/backup-${__ETIME}.log"
 
-	$AVORIONCMD exec +all --cron '\say Server restart in 1 hour'; sleep 15m
-	$AVORIONCMD exec +all --cron '\say Server restart in 45 minutes'; sleep 15m
-	$AVORIONCMD exec +all --cron '\say Server restart in 30 minutes'; sleep 15m
-	$AVORIONCMD exec +all --cron '\say Server restart in 15 minutes'; sleep 5m
-	$AVORIONCMD exec +all --cron '\say Server restart in 10 minutes'; sleep 5m
+	for __dir in "$__logdir" "$__backupdir" "$__incrdir"; do
+		if [[ ! -d "$__dir" ]]; then
+			mkdir -p "$__dir" || {
+				echo "Cannot create $__dir"
+				exit 1
+			}
+		fi
+	done
+
+	$__AVORIONCMD exec +all --cron '\say Server restart in 1 hour'; sleep 15m
+	$__AVORIONCMD exec +all --cron '\say Server restart in 45 minutes'; sleep 15m
+	$__AVORIONCMD exec +all --cron '\say Server restart in 30 minutes'; sleep 15m
+	$__AVORIONCMD exec +all --cron '\say Server restart in 15 minutes'; sleep 5m
+	$__AVORIONCMD exec +all --cron '\say Server restart in 10 minutes'; sleep 5m
 
 	for n in {5..1}; do
-		$AVORIONCMD exec +all --cron "\\say Server restart in $n minute$(plural $n)"
+		$__AVORIONCMD exec +all --cron "\\say Server restart in $n minute$(plural $n)"
 		sleep 1m
 	done
 
 	for n in {30..1}; do
-		$AVORIONCMD exec +all --cron "\\say Server restart in $n second$(plural $n)"
+		$__AVORIONCMD exec +all --cron "\\say Server restart in $n second$(plural $n)"
 		sleep 1
 	done
 
-	$AVORIONCMD stop +all --cron
+	$__AVORIONCMD stop +all --cron
 
-	if ! __perform_rsync; then
-		echo "Failed to perform rsync!"
-		((__failed++))
+	if (( __SKIPBACKUP < 1 )); then
+		printf "Syncing contents of $AVORION_SERVICEDIR to ${__incrdir}:\n"
+		if ! __perform_rsync "$AVORION_SERVICEDIR" "$__incrdir" >> "$__LOGFILE" 2>&1; then
+			echo "Failed to perform rsync!"
+			((__failed++))
+		fi
+		printf "---------------------------------------------------------\n\n" >> "$__LOGFILE"
 	fi
-	
+
 	if (( "${#__active_units[@]}" > 0 )); then
 		for __inst in "${__active_units[@]}"; do
 			__inst="${_inst%%.service}"
 			__inst="${_inst##avorion@}"
-			$AVORIONCMD start "$__inst" --cron
+			$__AVORIONCMD start "$__inst" --cron
 		done
 	fi
 
-	if (( __failed > 0 )); then
-		echo "Failed to perform backup rsync. Please check status!"
-		exit 1
+	if (( __SKIPBACKUP < 1 )); then
+		printf "Compressing contents of $__incrdir to $__backup_file:"
+		if (( __failed > 0 )); then
+			echo "Failed to perform backup rsync. Please check the log at <$__LOGFILE>!"
+			exit 1
+		fi
+
+		if ! __perform_compression "$__backup_file" "$__incrdir" >> "$__LOGFILE" 2>&1; then
+			echo "Compression failed! File: $__backup_file"
+			echo "Failed to perform backup compression. Please check the log at <$__LOGFILE>!"
+			exit 1
+		fi
+
+		if ! echo "$__ETIME" > "$AVORION_BAKDIR/lastfullbackup" 2>>"$__LOGFILE"; then
+			echo "Failed to set $AVORION_BAKDIR/lastfullbackup. Please check the log at <$__LOGFILE>"
+			exit 1
+		fi
 	fi
 }
 
-#
-#
-#
-#
 function __perform_rsync () {
-	local __fail=0
+	rsync --chown="$AVORION_USER":"$AVORION_ADMIN_GRP" "$1/" "$2/"
+	return $?
+}
 
-	rsync --chown="$AVORION_USER":"$AVORION_ADMIN_GRP" "$AVORION_SERVICEDIR"/ "$AVORION_BAKDIR"/ ||\
-		((__fail++))
-
+function __perform_compression () {
+	tar --owner "$AVORION_USER" --group "$AVORION_ADMIN_GRP" -zvcf "$1" -C "$2" .
+	return $?
 }
 
 # bool __validate_setting_conf <void>
