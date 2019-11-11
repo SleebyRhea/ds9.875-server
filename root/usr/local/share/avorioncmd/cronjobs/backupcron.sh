@@ -231,4 +231,5 @@ function getactive () {
 	local __unit_string='^[[:space:]]*avorion@[^[:space:]][^[:space:]]*.service[[:space:]][[:space:]]*loaded[[:space:]][[:space:]]*active[[:space:]][[:space:]]*running'
 	systemctl list-units 'avorion@*' | grep "$__unit_string" | awk '{print $1}' 2>/dev/null | sed 's,^avorion@,,; s,\.service$,,'
 }
+
 main "$@"
