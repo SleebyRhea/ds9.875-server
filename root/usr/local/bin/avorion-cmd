@@ -845,73 +845,6 @@ function __perform_sector_reset () {
 	echo "Logfile: ${AVORION_SERVICEDIR}/${_tmuxsess}/sectorremoval-${EDATE}.log"
 }
 
-# bool __perform_config_edits <string, string>
-#	Given a file and an instance, create a temporary
-#	file in which to operate on and install it in the
-#	correct instance directory. Note that this stops
-#	the instance before installing the edits, as Avorion
-#	will overwrite the edits made on restart.
-#	
-#	TODO: This is *very* WIP, use at your own risk
-function __perform_config_edits () {
-	__assert_valid_user_input "$2" \
-		|| die "Invalid file passed: <$2>" \
-	
-	local __instance="$1"
-	local __file="$2"
-	local __inst_file="${AVORION_SERVICEDIR}/${__instance}/${__file}"
-	local __temp_file="/tmp/avorion/${__instance}/${__file}.tmp"
-	local __editor
-
-	if ! [[ -w "${__inst_file}" ]]; then
-		say "Unable to edit file: <${__inst_file}>"
-
-		[[ -f "${__inst_file}" ]] \
-			|| die "File does not exist."
-	
-		die "File is not writable. Are the permissions correct?"	
-	fi
-
-	if [[ -d "/tmp/avorion/${__instance}" ]]; then 
-		[[ -f "${__temp_file}" ]] \
-			&& die "Config file is already open by another"
-	else
-		mkdir -p "/tmp/avorion-cmd/${1}" >/dev/null 2>&1 \
-			|| die "Unable to generate tmp directory /tmp/avorion-cmd/${1}"
-	fi
-
-	cp "${__inst_file}" "${__temp_file}" >/dev/null \
-		|| die "Unable to generate temp file for editting"
-
-	if [[ -z "${VISUAL}" ]]; then
-		if [[ -z "${EDITOR}" ]]; then
-			command -v nano >/dev/null 2>&1 ||\
-				__editor="vi" &&\
-				__editor="nano"
-		else
-			__editor="${EDITOR}"
-		fi
-	else
-		__editor="${VISUAL}"
-	fi
-
-	# Ignore shellcheck here, we **want** this to expand
-	trap "rm ${__temp_file} >/dev/null 2>&1 || echo 'Unable to remove tempfile'" EXIT SIGTERM
-
-	"${__editor}" "${__temp_file}" \
-		|| die "Unable to write to <${__temp_file}>"
-	
-	echo "Stopping avorion@${__instance}.service..."
-	__stop_avorion_instance "$__instance" >/dev/null
-
-	mv "$__temp_file" "$__inst_file" \
-		|| say "Unable to make changes to instance settings"
-
-	echo "Starting avorion@${__instance}.service..."
-	__start_avorion_instance "$__instance" \
-		|| die "Unable to start!"
-}
-
 # void __show_service_instances <void>
 #	Locate and verify current online and offline
 #	instances. Then, print them (formatted) to the screen
@@ -1119,18 +1052,6 @@ function main () {
 				exit 0
 			;;
 
-		config )
-			__set_tmux_instance "$2" ||\
-				die "${__err_bad_inst} <$2>"
-
-			[[ "$_tmuxsess" =~ ^[sS][tT][eE][aA][mM] ]] ||\
-				die "Steam configs are not managed by ${CMDNAME}"
-
-			__perform_config_edits "$_tmuxsess" "$3" ||\
-				exit 1 &&\
-				exit 0
-			;;
-
 		resetsectors )
 			__set_tmux_instance "$2" --skip-active-check ||\
 				die "${__err_bad_inst} <$2>"
@@ -1220,23 +1141,6 @@ Commands:
 	exec
 		${__f_green}${CMDNAME} exec <instance> <commands>${__t_clear}
 		Pass the given commands into the instance server session.
-		
-	config
-		${__f_green}${CMDNAME} config <instance> <file>${__t_clear}
-		Edit the specified configuration file for the Avorion instance
-		given.
-		
-		Avorion Config Files:
-			server.ini
-			modconfig.lua
-			whitelist.txt
-			blacklist.txt
-			admin.xml
-			ipblacklist.txt
-			group-whitelist.txt
-	
-		${__f_red}WARNING:${__t_clear} Use this at your own risk. This feature
-		is still under development and may be scrapped
 
 	resetsectors
 		${__f_green}${CMDNAME} resetsectors <instance> <x:y, ...>${__t_clear}
