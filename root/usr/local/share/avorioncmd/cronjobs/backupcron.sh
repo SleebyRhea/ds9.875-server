@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-declare __AVORIONCMD="/home/andrew/Source/ds9.875-server/root/usr/local/bin/avorion-cmd"
+declare __AVORIONCMD="/usr/local/bin/avorion-cmd"
 declare __LASTBACKUP=''
 declare __LOGFILE=''
 declare __SKIPBACKUP=0
@@ -10,8 +10,10 @@ function main() {
 	__validate_setting_conf &&\
 		source /etc/avorionsettings.conf
 
+	## Prevent backups from being taken if its been less than
+	## 24 hours
 	if [[ -f "$AVORION_BAKDIR/lastfullbackup" ]]; then
-		__LASTBACKUP="$(<"$AVORION_BAKDIR/lastfullbackup" | tr -d '\n')"
+		__LASTBACKUP="$(cat "$AVORION_BAKDIR/lastfullbackup" | tr -d '\n')"
 		printf 'Last Backup: %s\n' "$__LASTBACKUP"
 		if (( $((__ETIME - __LASTBACKUP)) < 86400 )); then
 			__SKIPBACKUP=1
@@ -37,19 +39,19 @@ function main() {
 	done
 
 	echo "Sending restart notifications..."
-	$__AVORIONCMD exec +all --cron '/say Server restart in 1 hour'; sleep 15m
-	$__AVORIONCMD exec +all --cron '/say Server restart in 45 minutes'; sleep 15m
-	$__AVORIONCMD exec +all --cron '/say Server restart in 30 minutes'; sleep 15m
-	$__AVORIONCMD exec +all --cron '/say Server restart in 15 minutes'; sleep 5m
-	$__AVORIONCMD exec +all --cron '/say Server restart in 10 minutes'; sleep 5m
+	$__AVORIONCMD exec +all --cron '/say Server backup in 1 hour'; sleep 15m
+	$__AVORIONCMD exec +all --cron '/say Server backup in 45 minutes'; sleep 15m
+	$__AVORIONCMD exec +all --cron '/say Server backup in 30 minutes'; sleep 15m
+	$__AVORIONCMD exec +all --cron '/say Server backup in 15 minutes'; sleep 5m
+	$__AVORIONCMD exec +all --cron '/say Server backup in 10 minutes'; sleep 5m
 
 	for n in {5..1}; do
-		$__AVORIONCMD exec +all --cron "\\say Server restart in $n minute$(plural $n)"
+		$__AVORIONCMD exec +all --cron "/say Server backup in $n minute$(plural $n)"
 		sleep 1m
 	done
 
 	for n in {30..1}; do
-		$__AVORIONCMD exec +all --cron "\\say Server restart in $n second$(plural $n)"
+		$__AVORIONCMD exec +all --cron "/say Stopping server in $n second$(plural $n)"
 		sleep 1
 	done
 
@@ -69,8 +71,7 @@ function main() {
 	echo "Restarting instances..."
 	if (( "${#__active_units[@]}" > 0 )); then
 		for __inst in "${__active_units[@]}"; do
-			__inst="${_inst%%.service}"
-			__inst="${_inst##avorion@}"
+			echo "Restarting $__inst"
 			$__AVORIONCMD start "$__inst" --cron
 		done
 	fi
