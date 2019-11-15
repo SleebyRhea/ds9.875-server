@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-declare __AVORIONCMD=/usr/local/bin/avorion-cmd
+declare __AVORIONCMD="/home/andrew/Source/ds9.875-server/root/usr/local/bin/avorion-cmd"
 declare __LASTBACKUP=''
 declare __LOGFILE=''
 declare __SKIPBACKUP=0
@@ -9,9 +9,10 @@ declare __ETIME="$(date +%s)"
 function main() {
 	__validate_setting_conf &&\
 		source /etc/avorionsettings.conf
-	
+
 	if [[ -f "$AVORION_BAKDIR/lastfullbackup" ]]; then
 		__LASTBACKUP="$(<"$AVORION_BAKDIR/lastfullbackup" | tr -d '\n')"
+		printf 'Last Backup: %s\n' "$__LASTBACKUP"
 		if (( $((__ETIME - __LASTBACKUP)) < 86400 )); then
 			__SKIPBACKUP=1
 		fi
@@ -25,6 +26,7 @@ function main() {
 	local __backup_file="${__backupdir}/backup-${__ETIME}.tar.gz"
 	local __LOGFILE="$__logdir/backup-${__ETIME}.log"
 
+	echo "Grabbing active instances..."
 	for __dir in "$__logdir" "$__backupdir" "$__incrdir"; do
 		if [[ ! -d "$__dir" ]]; then
 			mkdir -p "$__dir" || {
@@ -34,11 +36,12 @@ function main() {
 		fi
 	done
 
-	$__AVORIONCMD exec +all --cron '\say Server restart in 1 hour'; sleep 15m
-	$__AVORIONCMD exec +all --cron '\say Server restart in 45 minutes'; sleep 15m
-	$__AVORIONCMD exec +all --cron '\say Server restart in 30 minutes'; sleep 15m
-	$__AVORIONCMD exec +all --cron '\say Server restart in 15 minutes'; sleep 5m
-	$__AVORIONCMD exec +all --cron '\say Server restart in 10 minutes'; sleep 5m
+	echo "Sending restart notifications..."
+	$__AVORIONCMD exec +all --cron '/say Server restart in 1 hour'; sleep 15m
+	$__AVORIONCMD exec +all --cron '/say Server restart in 45 minutes'; sleep 15m
+	$__AVORIONCMD exec +all --cron '/say Server restart in 30 minutes'; sleep 15m
+	$__AVORIONCMD exec +all --cron '/say Server restart in 15 minutes'; sleep 5m
+	$__AVORIONCMD exec +all --cron '/say Server restart in 10 minutes'; sleep 5m
 
 	for n in {5..1}; do
 		$__AVORIONCMD exec +all --cron "\\say Server restart in $n minute$(plural $n)"
@@ -50,17 +53,20 @@ function main() {
 		sleep 1
 	done
 
+	echo "Stopping all instances..."
 	$__AVORIONCMD stop +all --cron
 
+	echo "Performing backup rsync..."
 	if (( __SKIPBACKUP < 1 )); then
 		printf "Syncing contents of $AVORION_SERVICEDIR to ${__incrdir}:\n"
 		if ! __perform_rsync "$AVORION_SERVICEDIR" "$__incrdir" >> "$__LOGFILE" 2>&1; then
 			echo "Failed to perform rsync!"
 			((__failed++))
 		fi
-		printf "---------------------------------------------------------\n\n" >> "$__LOGFILE"
+		printf -- '- - - - - - - -\n\n' >> "$__LOGFILE"
 	fi
 
+	echo "Restarting instances..."
 	if (( "${#__active_units[@]}" > 0 )); then
 		for __inst in "${__active_units[@]}"; do
 			__inst="${_inst%%.service}"
@@ -69,8 +75,9 @@ function main() {
 		done
 	fi
 
+	echo "Compressing backups...."
 	if (( __SKIPBACKUP < 1 )); then
-		printf "Compressing contents of $__incrdir to $__backup_file:"
+		printf "Compressing contents of $__incrdir to $__backup_file\n"
 		if (( __failed > 0 )); then
 			echo "Failed to perform backup rsync. Please check the log at <$__LOGFILE>!"
 			exit 1
@@ -90,7 +97,7 @@ function main() {
 }
 
 function __perform_rsync () {
-	rsync --chown="$AVORION_USER":"$AVORION_ADMIN_GRP" "$1/" "$2/"
+	rsync -av --chown="$AVORION_USER":"$AVORION_ADMIN_GRP" "$1/" "$2/"
 	return $?
 }
 
