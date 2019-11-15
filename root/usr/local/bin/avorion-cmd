@@ -875,7 +875,7 @@ function __show_service_instances () {
 
 	find "${AVORION_SERVICEDIR}"/* -maxdepth 1 -name 'server.ini' -printf '%h\n' | while read -r __dir; do
 		__inst="$(basename "$__dir")"
-		__strserv="${__inst}:"
+		__strserv="${__inst}"
 
 		if systemctl status --no-pager avorion@"$__inst".service >/dev/null 2>&1; then
 			__status="ONLINE "
