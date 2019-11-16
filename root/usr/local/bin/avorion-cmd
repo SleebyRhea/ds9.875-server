@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-CMDVERS='2.0-testing rev9'
+CMDVERS='2.0-testing rev10'
 CMDNAME="$(basename "$0")"
 EDATE="$(date +%s)"
 VERBOSE=0
@@ -287,12 +287,14 @@ function __stop_avorion_instance () {
 	local _time=0
 	local _pid
 
+	dbgsay "Checking $1"
 	if ! systemctl status --no-pager avorion@"$1".service >/dev/null 2>&1; then
+		dbgsay "Instance avorion@${1}.service is not active"
 		return 0
 	fi
 
 	## Get the operating PID for that intance
-	_pid="$(systemctl show --property MainPID --value avorion@"$1".service | tr -d '\n')"
+	_pid="$(systemctl show -p MainPID avorion@"$1".service | tr -d '\n' | sed 's,MainPID=,,')"
 
 	if [[ ! "$_pid" =~ ^[0-9][0-9]*$ ]]; then
 		echo "Bad pid: <$_pid>"
@@ -617,7 +619,7 @@ function __perform_update () {
 			_inst="${_inst%%.service}"
 			_inst="${_inst##avorion@}"
 			printf "${__f_lgray}>> Pausing <%s>${__t_clear}\n" "$_inst"
-			__stop_avorion_instance "${__inst}"
+			__stop_avorion_instance "${_inst}" >/dev/null
 		done
 	fi
 	
@@ -1040,6 +1042,11 @@ function main () {
 				exit 0
 			;;
 		
+		version | -V | --version )
+			echo "$CMDNAME v$CMDVERS"
+			exit 0
+			;;
+
 		update )
 			__perform_update ||\
 				exit 1 &&\
@@ -1108,47 +1115,47 @@ Options:
 		operate on. For now, only allowed on stop, restart, and exec.
 
 Commands:
-	showinstances --instances -I
-		${__f_green}${CMDNAME} <showinstances|--instances|-I>${__t_clear}
+	status showinstances --instances -I
+		${CMDNAME} <showinstances|--instances|-I>
 		Display a listing of all Avorion/Steam instances
 
 	help --help -h
-		${__f_green}${CMDNAME} <help|--help|-h>${__t_clear}
+		${CMDNAME} <help|--help|-h>
 		This help text
 	
 	usage --usage -u
-		${__f_green}${CMDNAME} <usage|--usage|-u>${__t_clear}
+		${CMDNAME} <usage|--usage|-u>
 		Print the usage text
 	
 	version --version -V
-		${__f_green}${CMDNAME} <version|--version|-V>${__t_clear}
+		${CMDNAME} <version|--version|-V>
 		Print versioning information
 	
 	start
-		${__f_green}${CMDNAME} start <instance>${__t_clear}
+		${CMDNAME} start <instance>
 		Start the given Avorion instance
 	
 	restart
-		${__f_green}${CMDNAME} restart <instance>${__t_clear}
+		${CMDNAME} restart <instance>
 		Restart the given instance
 	
 	stop
-		${__f_green}${CMDNAME} stop <instance>${__t_clear}
+		${CMDNAME} stop <instance>
 		Stop the given instance. Unlike when used in game, this will
 		prevent the game from restarting following the 30 second window.
 		Use this when configuration changes need to be made.
 	
 	exec
-		${__f_green}${CMDNAME} exec <instance> <commands>${__t_clear}
+		${CMDNAME} exec <instance> <commands>
 		Pass the given commands into the instance server session.
 
 	resetsectors
-		${__f_green}${CMDNAME} resetsectors <instance> <x:y, ...>${__t_clear}
-		${__f_green}${CMDNAME} resetsectors <instance> <x:x-y:y>${__t_clear}
+		${CMDNAME} resetsectors <instance> <x:y, ...>
+		${CMDNAME} resetsectors <instance> <x:x-y:y>
 		Reset the given sectors or range of sectors.
 
 	update
-		${__f_green}${CMDNAME} update ${__t_clear}
+		${CMDNAME} update
 		Force a server update to the latest version. Also prompts the
 		user to check for mod version conflicts if any modded instances
 		are found.
