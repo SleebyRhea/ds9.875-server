@@ -5,6 +5,7 @@ declare __LASTBACKUP=''
 declare __LOGFILE=''
 declare __SKIPBACKUP=0
 declare __ETIME="$(date +%s)"
+declare __MESSAGE='Server restart starts in'
 
 function main() {
 	__validate_setting_conf &&\
@@ -17,6 +18,7 @@ function main() {
 		printf 'Last Backup: %s\n' "$__LASTBACKUP"
 		if (( $((__ETIME - __LASTBACKUP)) < 86400 )); then
 			__SKIPBACKUP=1
+			__MESSAGE='Server backup starts in'
 		fi
 	fi
 
@@ -39,14 +41,14 @@ function main() {
 	done
 
 	echo "Sending restart notifications..."
-	$__AVORIONCMD exec +all --cron '/say Server backup in 1 hour'; sleep 15m
-	$__AVORIONCMD exec +all --cron '/say Server backup in 45 minutes'; sleep 15m
-	$__AVORIONCMD exec +all --cron '/say Server backup in 30 minutes'; sleep 15m
-	$__AVORIONCMD exec +all --cron '/say Server backup in 15 minutes'; sleep 5m
-	$__AVORIONCMD exec +all --cron '/say Server backup in 10 minutes'; sleep 5m
+	$__AVORIONCMD exec +all --cron "/say $__MESSAGE 1 hour"; sleep 15m
+	$__AVORIONCMD exec +all --cron "/say $__MESSAGE 45 minutes"; sleep 15m
+	$__AVORIONCMD exec +all --cron "/say $__MESSAGE 30 minutes"; sleep 15m
+	$__AVORIONCMD exec +all --cron "/say $__MESSAGE 15 minutes"; sleep 5m
+	$__AVORIONCMD exec +all --cron "/say $__MESSAGE 10 minutes"; sleep 5m
 
 	for n in {5..1}; do
-		$__AVORIONCMD exec +all --cron "/say Server backup in $n minute$(plural $n)"
+		$__AVORIONCMD exec +all --cron "/say $__MESSAGE $n minute$(plural $n)"
 		sleep 1m
 	done
 
