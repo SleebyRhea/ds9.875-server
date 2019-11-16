@@ -5,7 +5,7 @@ declare __LASTBACKUP=''
 declare __LOGFILE=''
 declare __SKIPBACKUP=0
 declare __ETIME="$(date +%s)"
-declare __MESSAGE='Server restart starts in'
+declare __MESSAGE='Server backup starts in'
 
 function main() {
 	__validate_setting_conf &&\
@@ -18,7 +18,7 @@ function main() {
 		printf 'Last Backup: %s\n' "$__LASTBACKUP"
 		if (( $((__ETIME - __LASTBACKUP)) < 86400 )); then
 			__SKIPBACKUP=1
-			__MESSAGE='Server backup starts in'
+			__MESSAGE='Server restart starts in'
 		fi
 	fi
 
