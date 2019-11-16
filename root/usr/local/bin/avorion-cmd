@@ -5,7 +5,7 @@ CMDNAME="$(basename "$0")"
 EDATE="$(date +%s)"
 VERBOSE=0
 NOSCREENCHECK=0
-VALIDCMDS='stop|start|restart|showinstances|view|attach|exec|update|resetsectors|usage|config'
+VALIDCMDS='stop|start|restart|showinstances|view|attach|exec|update|resetsectors|usage|config|version'
 VALIDSWCHS='-I|-h|-u|--help|-V|--version'
 DOALL=0
 
