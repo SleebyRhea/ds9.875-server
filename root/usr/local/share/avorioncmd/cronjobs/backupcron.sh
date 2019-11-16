@@ -47,13 +47,13 @@ function main() {
 	$__AVORIONCMD exec +all --cron "/say $__MESSAGE 15 minutes"; sleep 5m
 	$__AVORIONCMD exec +all --cron "/say $__MESSAGE 10 minutes"; sleep 5m
 
-	for n in {5..1}; do
+	for n in {5..2}; do
 		$__AVORIONCMD exec +all --cron "/say $__MESSAGE $n minute$(plural $n)"
 		sleep 1m
 	done
 
-	for n in {30..1}; do
-		$__AVORIONCMD exec +all --cron "/say Stopping server in $n second$(plural $n)"
+	for n in {60..1}; do
+		$__AVORIONCMD exec +all --cron "/say $__MESSAGE $n second$(plural $n)"
 		sleep 1
 	done
 
