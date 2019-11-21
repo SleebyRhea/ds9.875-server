@@ -59,6 +59,7 @@ function main() {
 
 	echo "Stopping all instances..."
 	$__AVORIONCMD stop +all --cron
+	touch /tmp/runningavorionbackup
 
 	echo "Performing backup rsync..."
 	if (( __SKIPBACKUP < 1 )); then
@@ -77,6 +78,7 @@ function main() {
 			$__AVORIONCMD start "$__inst" --cron
 		done
 	fi
+	rm /tmp/runningavorionbackup
 
 	echo "Compressing backups...."
 	if (( __SKIPBACKUP < 1 )); then
