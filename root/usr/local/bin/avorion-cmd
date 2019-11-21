@@ -314,7 +314,7 @@ function __stop_avorion_instance () {
 			(( CRON < 1 )) && printf '.'
 			sleep 1s
 		else
-			printf '\nInstance <%s> seems to be hanging, forcefully shutting down. This make take a moment..' "$1"
+			printf '\nInstance <%s> seems to be hanging, forcefully shutting down. This may take a moment..' "$1"
 			if ! sudo -n systemctl stop avorion@"$1" >/dev/null 2>&1; then
 				printf '%s\n' "Unable to stop <$1>. Killing."
 				sudo -n systemctl kill avorion@"$1" >/dev/null 2>&1
