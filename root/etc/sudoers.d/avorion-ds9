@@ -6,6 +6,7 @@ Cmnd_Alias AVORION_DS9TESTING_CMDS = /bin/systemctl start avorion@ds9testing, /b
 
 ## Allow DS9Admins to control the services defined above
 %dsnineadm ALL=(ALL) NOPASSWD: AVORION_DS9SERVER_CMDS, AVORION_DS9TESTING_CMDS
+avorion ALL=(ALL) NOPASSWD: AVORION_DS9SERVER_CMDS, AVORION_DS9TESTING_CMDS
 
 ## Allow DS9Admins to operate run steamcmd and create/rm select lockfiles
 %dsnineadm ALL=(avorion:dsnineadm) NOPASSWD: STEAM_COMMANDS, AVORION_TEMP_CMDS
