@@ -1,5 +1,5 @@
 #! /usr/bin/env bash
-declare __RCON='/usr/local/bin/rcon-cli'
+declare __RCON='/usr/bin/rcon'
 declare __AVOORION_CMD='/usr/local/bin/avorion-cmd'
 
 function main () {
@@ -9,7 +9,7 @@ function main () {
 		exit 0
 	fi
 
-	if ! $__RCON --host 173.208.246.242 --port 27015 --password 90210 status; then
+	if ! $__RCON -H 173.208.246.242 -p 27015 -P 90210 status; then
 		$__AVOORION_CMD restart +all
 	fi
 }
