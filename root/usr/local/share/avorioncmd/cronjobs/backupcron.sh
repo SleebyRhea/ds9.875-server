@@ -6,6 +6,7 @@ declare __LOGFILE=''
 declare __SKIPBACKUP=0
 declare __ETIME="$(date +%s)"
 declare __MESSAGE='Server backup starts in'
+declare __RETENTION=7
 
 function main() {
 	__validate_setting_conf &&\
@@ -40,22 +41,24 @@ function main() {
 		fi
 	done
 
-	echo "Sending restart notifications..."
-	$__AVORIONCMD exec +all --cron "/say $__MESSAGE 1 hour"; sleep 15m
-	$__AVORIONCMD exec +all --cron "/say $__MESSAGE 45 minutes"; sleep 15m
-	$__AVORIONCMD exec +all --cron "/say $__MESSAGE 30 minutes"; sleep 15m
-	$__AVORIONCMD exec +all --cron "/say $__MESSAGE 15 minutes"; sleep 5m
-	$__AVORIONCMD exec +all --cron "/say $__MESSAGE 10 minutes"; sleep 5m
+	if [[ "$1" != --skip-notification ]]; then
+		echo "Sending restart notifications..."
+		$__AVORIONCMD exec +all --cron "/say $__MESSAGE 1 hour"; sleep 15m
+		$__AVORIONCMD exec +all --cron "/say $__MESSAGE 45 minutes"; sleep 15m
+		$__AVORIONCMD exec +all --cron "/say $__MESSAGE 30 minutes"; sleep 15m
+		$__AVORIONCMD exec +all --cron "/say $__MESSAGE 15 minutes"; sleep 5m
+		$__AVORIONCMD exec +all --cron "/say $__MESSAGE 10 minutes"; sleep 5m
 
-	for n in {5..2}; do
-		$__AVORIONCMD exec +all --cron "/say $__MESSAGE $n minute$(plural $n)"
-		sleep 1m
-	done
+		for n in {5..2}; do
+			$__AVORIONCMD exec +all --cron "/say $__MESSAGE $n minute$(plural $n)"
+			sleep 1m
+		done
 
-	for n in {60..1}; do
-		$__AVORIONCMD exec +all --cron "/say $__MESSAGE $n second$(plural $n)"
-		sleep 1
-	done
+		for n in {60..1}; do
+			$__AVORIONCMD exec +all --cron "/say $__MESSAGE $n second$(plural $n)"
+			sleep 1
+		done
+	fi
 
 	echo "Stopping all instances..."
 	$__AVORIONCMD stop +all --cron
@@ -99,6 +102,13 @@ function main() {
 			exit 1
 		fi
 	fi
+
+	if ! __perform_backup_rotation "$__backupdir" "$__RETENTION"; then
+		echo "Failed to rotate backups" | tee -a $__LOGFILE
+		exit 1 
+	fi
+
+	exit 1
 }
 
 function __perform_rsync () {
@@ -109,6 +119,31 @@ function __perform_rsync () {
 function __perform_compression () {
 	tar --owner "$AVORION_USER" --group "$AVORION_ADMIN_GRP" -zvcf "$1" -C "$2" .
 	return $?
+}
+
+
+function __perform_backup_rotation () {
+	## Get all of the backup files in the compressed dir
+	local -a __backup_files=( $(find "$1" -name 'backup-*.tar.gz') )
+	local __failed=0
+
+	## Check if the number of files is greater than our retention. If it is, its
+	## to rotate
+	if (( "${#__backup_files[@]}" > "$2" )); then
+
+		## Acquire a new list of backups. We need to exclude the last n ($2) backups
+		## from the list, as they are the most recent and *must* be kept. So, we reverse
+		## the output using tac and delete the first 1 to n lines of output. We then overwrite
+		## our previous array with the new files and delete everything left.
+		__backup_files=( $(find "$1" -name 'backup-*.tar.gz' -mtime "+$2" | tac | sed "1,${2}d") )
+		for __file in "${__backup_files[@]}"; do
+			if ! rm -f "$__file" >> "$__LOGFILE"; then
+				((__failed++))
+			fi
+		done
+	fi
+
+	return "$__failed"
 }
 
 # bool __validate_setting_conf <void>
