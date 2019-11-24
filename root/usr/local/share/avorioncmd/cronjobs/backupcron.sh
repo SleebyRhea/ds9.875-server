@@ -64,8 +64,8 @@ function main() {
 	$__AVORIONCMD stop +all --cron
 	touch /tmp/runningavorionbackup
 
-	echo "Performing backup rsync..."
 	if (( __SKIPBACKUP < 1 )); then
+		echo "Performing backup rsync..."
 		printf "Syncing contents of $AVORION_SERVICEDIR to ${__incrdir}:\n"
 		if ! __perform_rsync "$AVORION_SERVICEDIR" "$__incrdir" >> "$__LOGFILE" 2>&1; then
 			echo "Failed to perform rsync!"
@@ -83,8 +83,8 @@ function main() {
 	fi
 	rm /tmp/runningavorionbackup
 
-	echo "Compressing backups...."
 	if (( __SKIPBACKUP < 1 )); then
+		echo "Compressing backups...."
 		printf "Compressing contents of $__incrdir to $__backup_file\n"
 		if (( __failed > 0 )); then
 			echo "Failed to perform backup rsync. Please check the log at <$__LOGFILE>!"
