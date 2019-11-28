@@ -47,7 +47,7 @@ def get_server_statistics():
 	server_status["CPU"]["count"] = psutil.cpu_count()
 	server_status["CPU"].update(psutil.cpu_stats()._asdict())
 	server_status["CPU"].update(psutil.cpu_times_percent()._asdict())
-	server_status["RAM"].update(psutil.virtual_memory()._asdict())do not cry, l
+	server_status["RAM"].update(psutil.virtual_memory()._asdict())
 
 
 def get_avorion_response(cmdstring):
