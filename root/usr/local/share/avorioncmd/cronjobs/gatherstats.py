@@ -1,10 +1,14 @@
 import re
 import os
+import sys
 import time
 import psutil
 import subprocess
+import dicttoxml
 
-output_file = "/srv/avorion/systemstatus.log"
+epoch_time = int(time.time())
+output_dir = "/srv/avorion/serverstats/"
+output_file = output_dir + str(epoch_time)
 rcon_hostfile = "/srv/avorion/rconhostfile"
 rcon_hostname = "ds9server"
 rcon_connect = "/usr/local/bin/rcon"
@@ -27,7 +31,7 @@ def setup_regex_dict():
 
 def get_server_statistics():
 	server_status = {
-		"epoch":                int(time.time()),
+		"epoch":                epoch_time,
 		"RAM":                  {},
 		"CPU":                  {},
 		"LOAD":                 {},
@@ -62,12 +66,12 @@ def get_avorion_response(cmdstring):
 			stdout=subprocess.PIPE,encoding="UTF-8", timeout=30)
 	except subprocess.TimeoutExpired:
 		print("Timeout exceeded on server connect. Assuming hang.")
-		return False
+		return "hang"
 	except subprocess.CalledProcessError:
 		print("Failed to connect to the server")
 		return False
 	if len(response.stdout) < 200:
-		return False
+		return "hang"
 	print(response.stdout)
 	return response.stdout
 
@@ -91,24 +95,37 @@ def parse_avorion_response(reg, resp, stat):
 	stat["loaded_sectors"] = m.group(1)
 	stat["total_sectors"] = m.group(2)
 
-def serialize_server_data():
-	return True
-
-def main(skipped=False):
+def main(out, skipped=False):
+	ret = True
 	stat = get_server_statistics()
 	stat["avorion"]["skipped"] = skipped
 	if not skipped:
 		reg = setup_regex_dict()
 		resp = get_avorion_response(rcon_connect)
 		if resp == False:
+			stat["avorion"]["connect_failure"] = True
+		elif resp == "hang":
 			stat["avorion"]["hang"] = True
-			print("Failed")
-			return False
-		if parse_avorion_response(reg, resp, stat) == False:
-			stat["avorion"]["hang"] = True
-			print("Failed")
-			return False
-
+		else:
+			if parse_avorion_response(reg, resp, stat) == False:
+				stat["avorion"]["hang"] = True
+	xml = dicttoxml.dicttoxml(stat)
+	
+	out.write(xml)
+	out.close()
+	ret_code = False
+	out.close()
+	return ret
+	
 if __name__ == '__main__':
-	main(check_backup_running())
+	if not os.path.exists(output_dir):
+		os.makedirs(output_dir)
+	try:
+		out = open(output_file, "wb+")
+	except:
+		print("Failed to open file!")
+		sys.exit(1)
+
+	if not main(out, check_backup_running()):
+		sys.exit(1)
 
