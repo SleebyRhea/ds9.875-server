@@ -1,17 +1,52 @@
 #! /usr/bin/env bash
 declare __RCON='/usr/bin/rcon'
 declare __AVOORION_CMD='/usr/local/bin/avorion-cmd'
+declare __ETIME="$(date +%s)"
+declare __DATE="$(date -d "@$__ETIME" +%m-%d-%Y)"
 
 function main () {
 	__validate_setting_conf &&\
 		source /etc/avorionsettings.conf
+
 	if [[ -f /tmp/runningavorionbackup ]]; then
 		exit 0
 	fi
 
-	if ! $__RCON -H 173.208.246.242 -p 27015 -P 90210 status; then
-		$__AVOORION_CMD restart +all
+	local __tmpfile="$(mktemp)"
+	local __restarted=0
+
+	echo >> /srv/avorion/serverstatus.log
+	echo "Log Started @ $__ETIME ($__DATE)" >> /srv/avorion/serverstatus.log
+	printf "Testing RCON..." >> /srv/avorion/serverstatus.log 
+	if ! $__RCON -H 173.208.246.242 -p 27015 -P 90210 status >"$__tmpfile" 2>&1; then
+		echo "Failed to connect. Restarting Avorion." >> /srv/avorion/serverstatus.log
+		$__AVOORION_CMD restart +all >> /srv/avorion/serverstatus.log
+		sed 's,.*,\t&,' "$__tmpfile" | tee -a /srv/avorion/serverstatus.log
+		__restarted=1
+	else
+		echo "Connected" >> /srv/avorion/serverstatus.log
 	fi
+
+	if (( __restarted < 1 )); then
+		__last_log="$(find /srv/avorion/ds9server -maxdepth 1 -name 'serverlog *' -exec stat -c "%n:%Y" {} \; | sort -t: -k2 -n | tail -n1)"
+		__last_log="${__last_log%%:*}"
+
+		printf "Checking logfile ${__last_log}..." >> /srv/avorion/serverstatus.log
+		if tail -n 10 "$__last_log" | grep -q '^Hang of at least 30 seconds detected' >/dev/null 2>&1; then
+			echo "Detected hang. Restarting Avorion" >> /srv/avorion/serverstatus.log
+			$__AVOORION_CMD restart +all >> /srv/avorion/serverstatus.log
+			sed 's,.*,\t&,' "$__tmpfile" | tee -a /srv/avorion/serverstatus.log
+		else
+			echo "Passed check." >> /srv/avorion/serverstatus.log
+		fi
+	fi
+
+	cat "$__tmpfile" >> /srv/avorion/serverstatus.log
+	rm -v "$__tmpfile" >>/srv/avorion/serverstatus.log 2>&1
+	echo "Closing log at $(date +%s) ($(date -d "@$(date +%s)" +%m-%d-%Y))" >> /srv/avorion/serverstatus.log
+	echo >> /srv/avorion/serverstatus.log
+	chown "$AVORION_USER":"$AVORION_ADMIN_GRP" /srv/avorion/serverstatus.log
+	exit 0
 }
 
 # bool __validate_setting_conf <void>
