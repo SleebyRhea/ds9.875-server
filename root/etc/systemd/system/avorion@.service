@@ -17,12 +17,18 @@ ProtectControlGroups=true
 
 ; This should be set to the Steam64 ID for the
 ; primary server administrator
-Environment=ADMIN=
+Environment=ADMIN=123123
+Environment=RETENTION=7
+Environment=LOGFILE=/srv/avorion/%i/serverlog-current.log
+Environment=COMPOSITELOGFILE=/srv/avorion/%i/serverlog-concatenated.log
 
-ExecStart=/usr/bin/tmux -f /etc/avorioncmd-tmux.conf -S /srv/avorion/sockets/%i.sock new-session -d -s avorion-%i "cd /srv/avorion/server_files; LD_LIBRARY_PATH=/srv/avorion/server_files/linux64 /srv/avorion/server_files/bin/AvorionServer --galaxy-name %i --admin ${ADMIN} --datapath /srv/avorion; exit $$?"
+ExecStartPre=/bin/bash -c "[[ -f '${LOGFILE}' ]] && cat '${LOGFILE}' >> '${COMPOSITELOGFILE}'"
+ExecStartPre=/bin/bash -c "printf '\n\n%%s\n' \"Server started at $$(date +%%s)\" >> '${COMPOSITELOGFILE}'"
+ExecStart=/usr/bin/tmux -f /etc/avorioncmd-tmux.conf -S /srv/avorion/sockets/%i.sock new-session -d -s avorion-%i "cd /srv/avorion/server_files; LD_LIBRARY_PATH=/srv/avorion/server_files/linux64 /srv/avorion/server_files/bin/AvorionServer --galaxy-name %i --admin ${ADMIN} --datapath /srv/avorion --max-logs 1 2>&1 | tee "${LOGFILE}" ; exit $$?"
 ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock send-keys -t avorion-%i '/say Server going is down' ENTER
 ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock send-keys -t avorion-%i '/save' ENTER
 ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock send-keys -t avorion-%i '/stop' ENTER
 
 Restart=always
 RestartSec=30s
+TimeoutStopSec=45
