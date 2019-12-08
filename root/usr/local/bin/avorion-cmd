@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-CMDVERS='2.0-testing rev10'
+CMDVERS='2.0-testing rev11'
 CMDNAME="$(basename "$0")"
 EDATE="$(date +%s)"
 VERBOSE=0
