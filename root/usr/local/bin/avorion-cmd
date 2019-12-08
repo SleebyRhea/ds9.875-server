@@ -318,6 +318,7 @@ function __stop_avorion_instance () {
 			if ! sudo -n systemctl stop avorion@"$1" >/dev/null 2>&1; then
 				printf '%s\n' "Unable to stop <$1>. Killing."
 				sudo -n systemctl kill avorion@"$1" >/dev/null 2>&1
+				rm "${AVORION_SERVICEDIR}/sockets/${1}.sock"
 				return 1
 			fi
 		fi
