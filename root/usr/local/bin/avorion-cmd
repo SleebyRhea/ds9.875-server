@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-CMDVERS='2.0-testing rev11'
+CMDVERS='2.0-testing rev12'
 CMDNAME="$(basename "$0")"
 EDATE="$(date +%s)"
 VERBOSE=0
@@ -150,8 +150,8 @@ function __set_tmux_instance () {
 			fi
 
 			if [[ "$_arg" =~ ^${VALIDCMDS}|${VALIDSWCHS}$ ]]; then
-				echo "$_arg is not a valid instance name."
-				echo "Usage: $CMDNAME $_arg <instance_name>"
+				echo "$_arg is not a valid galaxy name."
+				echo "Usage: $CMDNAME $_arg <galaxy_name>"
 				exit 1 
 			fi
 
@@ -176,7 +176,7 @@ function __set_tmux_instance () {
 		_tmuxsock="${AVORION_SERVICEDIR}/sockets/${_tmuxsess}.sock"
 		return 0
 	else
-		echo "$_tmuxsess is not a valid instance"
+		echo "$_tmuxsess is not a valid galaxy"
 		exit 1
 	fi
 }
@@ -266,7 +266,7 @@ function __start_avorion_instance () {
 		
 			if (( _noout < 1 )); then
 				printf "${__f_red}%s${__t_clear}\n" 'Fail'
-				printf "\t\tEither the service is broken, or the instance you are starting is not configured\n"
+				printf "\t\tEither the service is broken, or the galaxy you are starting is not configured\n"
 				printf "\t\tIf this is intentional, and you have permissions, use sudo."
 			else
 				printf 'Failed to start avorion@%s.service\n' "${_sess}"
@@ -278,7 +278,7 @@ function __start_avorion_instance () {
 		fi
 	fi
 
-	(( _noout < 1 )) && printf 'Instance <%s> is already active.\n' "$_sess"
+	(( _noout < 1 )) && printf 'Galaxy <%s> is already active.\n' "$_sess"
 
 	return 0
 }
@@ -289,7 +289,7 @@ function __stop_avorion_instance () {
 
 	dbgsay "Checking $1"
 	if ! systemctl status --no-pager avorion@"$1".service >/dev/null 2>&1; then
-		dbgsay "Instance avorion@${1}.service is not active"
+		dbgsay "Galaxy instance avorion@${1}.service is not active"
 		return 0
 	fi
 
@@ -303,7 +303,7 @@ function __stop_avorion_instance () {
 
 	dbgsay "Using pid: $_pid"
 
-	(( CRON < 1 )) && printf 'Stopping <%s> instance, this could take a while...' "$1"
+	(( CRON < 1 )) && printf 'Stopping <%s> galaxy, this could take a while...' "$1"
 	"$_tmuxcmd" -f "${_tmuxconf}" -S "${AVORION_SERVICEDIR}/sockets/${1}.sock" \
 		send-keys ENTER "/say Stopping Avorion..." ENTER "/save" ENTER "/stop" ENTER \;
 
@@ -314,7 +314,7 @@ function __stop_avorion_instance () {
 			(( CRON < 1 )) && printf '.'
 			sleep 1s
 		else
-			printf '\nInstance <%s> seems to be hanging, forcefully shutting down. This may take a moment..' "$1"
+			printf '\nGalaxy instance <%s> seems to be hanging, forcefully shutting down. This may take a moment..' "$1"
 			if ! sudo -n systemctl stop avorion@"$1" >/dev/null 2>&1; then
 				printf '%s\n' "Unable to stop <$1>. Killing."
 				sudo -n systemctl kill avorion@"$1" >/dev/null 2>&1
@@ -326,7 +326,7 @@ function __stop_avorion_instance () {
 
 	if ! sudo -n systemctl stop avorion@"$1" >/dev/null; then
 		printf "Cannot fully stop! (Do you have permission to?)\n"
-		printf '"\save + \stop" has been sent, but instance will reboot due to lack of permissions.\n'
+		printf '"\save + \stop" has been sent, but the instance will reboot due to lack of permissions.\n'
 	fi
 	(( CRON < 1 )) && printf "Done.\n"
 
@@ -335,7 +335,7 @@ function __stop_avorion_instance () {
 
 function __sendcmd_avorion_instance () {
 	[[ -z "$__inst" ]] &&\
-		die "Please supply a valid instance: <$__inst>"
+		die "Please supply a valid galaxy: <$__inst>"
 
 	for __param; do
 		"$_tmuxcmd" \
@@ -382,7 +382,7 @@ function __check_incompatible_modlist () {
 			continue
 		fi
 
-		## No point in attempting to operate on instances
+		## No point in attempting to operate on galaxies
 		## without any mods downloaded.
 		if [[ ! -d "${__instdir}/workshop/content/445220/" ]]; then
 			dbgsay ">> No workshop content directory found <${__instdir}/workshop/content/445220/>"
@@ -393,22 +393,22 @@ function __check_incompatible_modlist () {
 		__modded_insts["$( basename "$__instdir" )"]=PASS
 	done <<< "$( find "$AVORION_SERVICEDIR" -maxdepth 2 -type f -name modconfig.lua -printf '%h\n' 2>/dev/null )"
 
-	printf "${__f_white}Searching for modded instances...Found ${#__modded_insts[@]}\n"
+	printf "${__f_white}Searching for modded galaxies...Found ${#__modded_insts[@]}\n"
 	for _inst in "${!__modded_insts[@]}"; do
 		printf "${__f_lgray}>> Found: <%s>${__t_clear}\n" "$_inst"
 	done
 
 	if (( ${#__modded_insts[@]} < 1 )); then
-		printf "${__f_lgray}>> No modded instances found.${__t_clear}\n"
+		printf "${__f_lgray}>> No modded galaxies found.${__t_clear}\n"
 		return 0
 	fi
 
 	printf "\n${__f_white}Gathering data for version checking...${__t_clear}"
 
 	dbgsay ""
-	## Gather mod information from all of the instances currently present.
+	## Gather mod information from all of the galaxies currently present.
 	for __inst in "${!__modded_insts[@]}"; do
-		## Parse out all of the workshop IDs for the operative instance
+		## Parse out all of the workshop IDs for the operative galaxy
 		__modlist="$( sed -nr '
 			/^\s*\{\s*workshopid/ { 
 				s@^\s*\{\s*workshopid\s*=\s*("[0-9]+")\s*},.*@\1@
@@ -433,9 +433,9 @@ function __check_incompatible_modlist () {
 
 			## Populate the array with the fields that we will be operating on.
 			## Fields are denoted by a ':'. Fields are as follows:
-			##		1. Max Version (The highest max version found in any instance dir)
-			##		2. Min Version (The highest min version found in any instance dir)
-			##		3. Instance List (list of instances that have this mod
+			##		1. Max Version (The highest max version found in any galaxy dir)
+			##		2. Min Version (The highest min version found in any galaxy dir)
+			##		3. Galaxy List (list of galaxies that have this mod
 			if [[ ! "${__mod_data["$__modid"]}" =~ ^([^:]*):([^:]*):([^:]*)$ ]]; then
 				dbgsay ">> Generating new data for ${__modid}"
 				__mod_data["$__modid"]='::'
@@ -542,7 +542,7 @@ function __check_incompatible_modlist () {
 		fi
 	done
 
-	printf "${__f_white}\nComplete, %s/%s passed version checks. Final instance status:${__t_clear}\n" \
+	printf "${__f_white}\nComplete, %s/%s passed version checks. Final galaxy instance status:${__t_clear}\n" \
 		"$(( ${#__mod_data[@]} - __fail_count ))" "${#__mod_data[@]}"
 
 	for __inst in "${!__modded_insts[@]}"; do
@@ -609,12 +609,12 @@ function __perform_update () {
 			printf "${__f_red}Failed to unlock updates${__t_clear}\n"
 		exit $?' TERM EXIT INT 
 
-	# Queries the systemd bus for active avorion@ instances and saves them
-	printf "${__f_white}Checking for active Avorion instances...${__t_clear}"
+	# Queries the systemd bus for active avorion@ galaxies and saves them
+	printf "${__f_white}Checking for active Avorion galaxies...${__t_clear}"
 	_units=( $(systemctl list-units 'avorion@*' | grep "$__unit_string" | awk '{print $1}') )
 	printf "${__f_white}Found %s\n${__t_clear}" "${#_units[@]}"
 
-	# If there were any active instances, stop them.
+	# If there were any active galaxies, stop them.
 	if (( "${#_units[@]}" > 0 )); then
 		for _inst in "${_units[@]}"; do
 			_inst="${_inst%%.service}"
@@ -721,7 +721,7 @@ function __perform_update () {
 	fi
 
 	if (( _failed > 0 )); then
-		printf "\n$_failed instance$(plural "$_failed") failed to start!\n"
+		printf "\n$_failed galaxy instance$(plural "$_failed") failed to start!\n"
 		exit 1
 	fi
 
@@ -858,18 +858,18 @@ function __show_service_instances () {
 	local __pad="$(printf '%*s' "$__padlimit")"
 	local __padlength=30
 	local __strstat=Status
-	local __strinst=Instance
+	local __strinst=Galaxy
 	local __strserv __status __color
 
 	if (( $(find "${AVORION_SERVICEDIR}"/* -maxdepth 1 -name 'server.ini' -printf . | wc -c) < 1 )); then 
-		echo "No instances configured in <$AVORION_SERVICEDIR>"
+		echo "No galaxies are configured in <$AVORION_SERVICEDIR>"
 		exit 0
 	fi
 
 	## Padded output modified from StackExchange
 	## 		https://stackoverflow.com/questions/4409399/padding-characters-in-printf
 	printf "${__f_white}Avorion Commander v%s\n\n" "$CMDVERS" 
-	printf "${__f_white}Service Location: %s\n" "$AVORION_SERVICEDIR/<instance>"
+	printf "${__f_white}Service Location: %s\n" "$AVORION_SERVICEDIR/<galaxy>"
 	printf "${__f_white}Backups Location: %s\n" "$AVORION_BAKDIR"
 	printf '\n'
 	printf "${__f_black}${__b_white}${__strinst}%*.*s%s     ${__t_clear}\n" 0 $(( __padlength - ${#__strinst} )) \
@@ -943,7 +943,7 @@ function main () {
 		set -- "$@" "${_arg}"
 	done
 
-	local __err_bad_inst='Invalid instance passed:'
+	local __err_bad_inst='Invalid galaxy passed:'
 
 	if [[ -n "$__allowed" ]]; then
 		if [[ ! "$1" =~ ^${__allowed%%:*}$ ]]; then
@@ -1104,7 +1104,7 @@ Options:
 		Output various debug output to stdout when given
 
 	--attach
-		Attempt to attach to an instance following processing
+		Attempt to attach to a galaxy nstance following processing
 		the primary command given. For use with "$CMDNAME exec"
 
 	--cron
@@ -1118,7 +1118,7 @@ Options:
 Commands:
 	status showinstances --instances -I
 		${CMDNAME} <showinstances|--instances|-I>
-		Display a listing of all Avorion/Steam instances
+		Display a listing of all Avorion Galaxies in the service directory
 
 	help --help -h
 		${CMDNAME} <help|--help|-h>
@@ -1133,32 +1133,32 @@ Commands:
 		Print versioning information
 	
 	start
-		${CMDNAME} start <instance>
-		Start the given Avorion instance
+		${CMDNAME} start <galaxy>
+		Start the given Avorion galaxy instance
 	
 	restart
-		${CMDNAME} restart <instance>
-		Restart the given instance
+		${CMDNAME} restart <galaxy>
+		Restart the given galaxy
 	
 	stop
-		${CMDNAME} stop <instance>
-		Stop the given instance. Unlike when used in game, this will
+		${CMDNAME} stop <galaxy>
+		Stop the given galaxy instance. Unlike when used in game, this will
 		prevent the game from restarting following the 30 second window.
 		Use this when configuration changes need to be made.
 	
 	exec
-		${CMDNAME} exec <instance> <commands>
-		Pass the given commands into the instance server session.
+		${CMDNAME} exec <galaxy> <commands>
+		Pass the given commands into the galaxy instance server session.
 
 	resetsectors
-		${CMDNAME} resetsectors <instance> <x:y, ...>
-		${CMDNAME} resetsectors <instance> <x:x-y:y>
+		${CMDNAME} resetsectors <galaxy> <x:y, ...>
+		${CMDNAME} resetsectors <galaxy> <x:x-y:y>
 		Reset the given sectors or range of sectors.
 
 	update
 		${CMDNAME} update
 		Force a server update to the latest version. Also prompts the
-		user to check for mod version conflicts if any modded instances
+		user to check for mod version conflicts if any modded galaxies
 		are found.
 _EOF_
 			exit 0
