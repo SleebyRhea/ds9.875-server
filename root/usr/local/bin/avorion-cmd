@@ -1291,15 +1291,6 @@ function __compare_version_string () {
 	return 0
 }
 
-# bool __assert_valid_user_input <string>
-#	Check the string given for bash symbols
-#	and return error if any are found.
-function __assert_valid_user_input () {
-	[[ "$1" =~ [/\\\$\&\@\#\`\~\=\+\{\}\[\]\|\'\"] ]] &&\
-		return 1 ||\
-		return 0
-}
-
 # void say <string, ...>
 #	Ouput the strings passed to stdout and return
 function say () {
