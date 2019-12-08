@@ -54,8 +54,6 @@ function main () {
 	
 	__fintime="$(date +%s)"
 	echo "Log Closed @ $__fintime ($(date -d "@$__fintime" +%m-%d-%Y))" >> /srv/avorion/serverstatus.log
-	echo >> /srv/avorion/serverstatus.log
-	
 	if [[ "$(id -u 2>/dev/null)" == "0" ]]; then
 		chown "$AVORION_USER":"$AVORION_ADMIN_GRP" /srv/avorion/serverstatus.log
 	fi
