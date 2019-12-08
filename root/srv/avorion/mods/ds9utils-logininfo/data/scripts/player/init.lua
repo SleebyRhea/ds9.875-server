@@ -3,7 +3,7 @@ if onServer() then
 		-- Return table size
 		local function __getLength(t)
 			local __cnt = 0
-			for _ in pairs(t) do cnt = cnt + 1 end
+			for _ in ipairs(t) do cnt = cnt + 1 end
 			return __cnt
 		end
 
@@ -69,8 +69,6 @@ if onServer() then
 		-- utility does NOT make use of a raw Lua table when passed it. Thus, the following
 		-- syntax MUST be used. I've tried to make this as painless to interpret as possible.
 		include ("stringutility")
-
-		-- Player Data
 		print("[${m}] ${p} ::> Current Ship Name=<${n1}>, Blocks=<${b}>, Loc=<${x}:${y}>"%_T % {m=__d.mod,p=__d.plr,n1=__d.name_craft,b=__d.count_blocks,x=__d.coordsx,y=__d.coordsy} )
 		print("[${m}] ${p} ::> Total Station Counts: player=<${n1}>, alliance=<${n2}>"%_T % {m=__d.mod,p=__d.plr,n1=__d.count_stations_player,n2=__d.count_stations_alliance} )
 		print("[${m}] ${p} ::> Total Ship Counts: player=<${n1}>, alliance=<${n2}>"%_T % {m=__d.mod,p=__d.plr,n1=__d.count_ships_player,n2=__d.count_ships_alliance} )
