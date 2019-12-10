@@ -47,6 +47,11 @@ install -m 0440 ./root/etc/sudoers.d/avorion-ds9 /etc/sudoers.d/avorion-ds9
 install -m 755 ./root/usr/local/bin/avorion-cmd /usr/local/bin/avorion-cmd
 
 source /etc/avorionsettings.conf
+
+echo "Ensuring $AVORION_USER user and $AVORION_ADMIN_GRP exist"
+useradd "$AVORION_USER" -d /srv/"$AVORION_USER" -c "Avorion Service User" -r -s /sbin/nologin
+groupadd "$AVORION_ADMIN_GRP"
+
 if [ -z "$AVORION_SERVICEDIR" ] || [ -z "$AVORION_ADMIN_GRP" ] || [ -z "$AVORION_USER" ]; then
 	echo "Avorion instance definitions missing"
 	exit 1
@@ -60,7 +65,9 @@ if ! [ -d "${AVORION_SERVICEDIR}/sockets" ]; then
 	mkdir "$AVORION_SERVICEDIR"
 fi
 
+
 echo "Setting permissions for <${AVORION_SERVICEDIR}>:"
+
 chown -R "$AVORION_USER":"$AVORION_ADMIN_GRP" "$AVORION_SERVICEDIR"
 __filesys="$(df "$AVORION_SERVICEDIR" 2>&1 | tail -n 1 | awk '{printf "%s",$1}')"
 if { echo "$__filesys" | grep -q 'type xfs' >/dev/null 2>&1; } || { echo "$__filesys" | grep -q acl >/dev/null 2>&1; }; then
