@@ -11,6 +11,9 @@ WorkingDirectory=/srv/avorion
 ProtectSystem=full
 PrivateUsers=true
 ProtectHome=true
+
+; Invalid settings on CentOS 7. Enable these if running on Debian/Ubuntu or
+; if running a modern SystemD
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
