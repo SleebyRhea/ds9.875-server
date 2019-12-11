@@ -1,7 +1,14 @@
-include("utility")
-include("stringutility")
-include("weapontype")
+--[[
 
+    DS9 Utilities - Welcome Email
+    -----------------------------
+    Sends off an email to a newly joined player using either the defaults
+    provided below, or via a MailText.txt file located in the Server root
+    directory. Also optionally (and by default) adds one or more turrets
+    of your spefication to the email as an attachment.
+
+    Licensed under the "BSD-3-Clause" license
+]]
 do
     local __old_path = package.path
     local vanilla_initialize = initialize
@@ -13,12 +20,12 @@ do
     
     include("utility")
     include("stringutility")
-    include("callable")
-    
+    include("weapontype")
+
     local __d = {
         -- Mod Init
         turret     = nil,
-        i_modname    = "ds9utils-welcomeemail",
+        i_modname  = "ds9utils-welcomeemail",
 
         -- Default Message Information
         m_sender   = "DS9 Admin Team",
