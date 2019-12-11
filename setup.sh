@@ -33,9 +33,31 @@ mv -t backup/ \
 	/etc/systemd/system/avorion@.service \
 	/etc/systemd/system/steamcmd.service \
 	/usr/local/bin/avorion-cmd \
+	/usr/local/share/avorioncmd/cronjobs
 
 if ! ( cd ./root >/dev/null 2>&1 ); then
 	echo "Unable to switch to root. Please make sure to run this from the project root"
+	exit 1
+fi
+
+source /etc/avorionsettings.conf
+
+if [ -z "$AVORION_SERVICEDIR" ] || [ -z "$AVORION_ADMIN_GRP" ] || [ -z "$AVORION_USER" ]; then
+	echo "Avorion instance definitions missing"
+	exit 1
+fi
+
+echo "Ensuring $AVORION_USER user and $AVORION_ADMIN_GRP exist"
+useradd "$AVORION_USER" -d /srv/"$AVORION_USER" -c "Avorion Service User" -r -s /sbin/nologin
+groupadd "$AVORION_ADMIN_GRP"
+
+if ! mkdir -p /usr/local/share/avorioncmd/cronjobs; then
+	echo "Failed to create cronjobs directory!"
+	exit 1
+fi
+
+if ! mkdir -p "$AVORION_SERVICEDIR"/{mods,sockets}; then
+	echo "Failed to create service directories!"
 	exit 1
 fi
 
@@ -45,26 +67,9 @@ install -m 644 ./root/etc/systemd/system/avorionservers.target /etc/systemd/syst
 install -m 644 ./root/etc/systemd/system/avorion@.service /etc/systemd/system/avorion@.service
 install -m 0440 ./root/etc/sudoers.d/avorion-ds9 /etc/sudoers.d/avorion-ds9
 install -m 755 ./root/usr/local/bin/avorion-cmd /usr/local/bin/avorion-cmd
+install -m 644 -t usr/local/share/avorioncmd/cronjobs ./root/usr/local/share/avorioncmd/cronjobs/*
 
-source /etc/avorionsettings.conf
-
-echo "Ensuring $AVORION_USER user and $AVORION_ADMIN_GRP exist"
-useradd "$AVORION_USER" -d /srv/"$AVORION_USER" -c "Avorion Service User" -r -s /sbin/nologin
-groupadd "$AVORION_ADMIN_GRP"
-
-if [ -z "$AVORION_SERVICEDIR" ] || [ -z "$AVORION_ADMIN_GRP" ] || [ -z "$AVORION_USER" ]; then
-	echo "Avorion instance definitions missing"
-	exit 1
-fi
-
-if ! [ -d "$AVORION_SERVICEDIR" ]; then
-	mkdir "$AVORION_SERVICEDIR"
-fi
-
-if ! [ -d "${AVORION_SERVICEDIR}/sockets" ]; then
-	mkdir "$AVORION_SERVICEDIR"
-fi
-
+\cp -rf "$AVORION_SERVICEDIR"/mods/ ./root/srv/avorion/mods/*
 
 echo "Setting permissions for <${AVORION_SERVICEDIR}>:"
 
@@ -77,4 +82,7 @@ if { echo "$__filesys" | grep -q 'type xfs' >/dev/null 2>&1; } || { echo "$__fil
 	setfacl -d -m g:"$AVORION_ADMIN_GRP":rwX "$AVORION_SERVICEDIR"
 fi
 
-echo 'Done. Make sure to set the ADMIN value in </etc/systemd/system/avorion@.service>'
+systemctl daemon-reload
+
+echo 'Done. Make sure to set the ADMIN value in </etc/systemd/system/avorion@.service> and run sudo systemctl daemon-reload!!'
+echo 'Cronjobs are left off for now, configure them via crontab -e'
