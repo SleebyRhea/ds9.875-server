@@ -3,7 +3,7 @@ if onServer() then
 		-- Return table size
 		local function __getLength(t)
 			local __cnt = 0
-			for _ in ipairs(t) do cnt = cnt + 1 end
+			for _ in ipairs(t) do __cnt = __cnt + 1 end
 			return __cnt
 		end
 
