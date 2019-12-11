@@ -77,6 +77,11 @@ function main() {
 	echo "Restarting instances..."
 	if (( "${#__active_units[@]}" > 0 )); then
 		for __inst in "${__active_units[@]}"; do
+			if [[ -f "${AVORION_SERVICEDIR}/${__inst}/server.ini.replace" ]]; then
+				echo "Replacing server.ini"
+				cp "${AVORION_SERVICEDIR}/${__inst}/server.ini" "${AVORION_SERVICEDIR}/${__inst}/server.ini.bak-$__ETIME"
+				mv "${AVORION_SERVICEDIR}/${__inst}/server.ini.replace"	"${AVORION_SERVICEDIR}/${__inst}/server.ini"
+			fi
 			echo "Restarting $__inst"
 			$__AVORIONCMD start "$__inst" --cron
 		done
@@ -101,11 +106,13 @@ function main() {
 			echo "Failed to set $AVORION_BAKDIR/lastfullbackup. Please check the log at <$__LOGFILE>"
 			exit 1
 		fi
-	fi
 
-	if ! __perform_backup_rotation "$__backupdir" "$__RETENTION"; then
-		echo "Failed to rotate backups" | tee -a $__LOGFILE
-		exit 1 
+		## Only rotate if backups were successful
+		if ! __perform_backup_rotation "$__backupdir" "$__RETENTION"; then
+			echo "Failed to rotate backups" | tee -a $__LOGFILE
+			exit 1 
+		fi
+
 	fi
 
 	exit 1
@@ -124,19 +131,24 @@ function __perform_compression () {
 
 function __perform_backup_rotation () {
 	## Get all of the backup files in the compressed dir
+	printf  "Detecting backup count...."
 	local -a __backup_files=( $(find "$1" -name 'backup-*.tar.gz') )
 	local __failed=0
+	echo "Found ${#__backup_files[@]}"
+	echo "Retention is $2"
 
 	## Check if the number of files is greater than our retention. If it is, its
-	## to rotate
-	if (( "${#__backup_files[@]}" > "$2" )); then
+	## time to rotate
+	if (( ${#__backup_files[@]} > $2 )); then
 
 		## Acquire a new list of backups. We need to exclude the last n ($2) backups
 		## from the list, as they are the most recent and *must* be kept. So, we reverse
 		## the output using tac and delete the first 1 to n lines of output. We then overwrite
 		## our previous array with the new files and delete everything left.
-		__backup_files=( $(find "$1" -name 'backup-*.tar.gz' -mtime "+$2" | tac | sed "1,${2}d") )
+		__backup_files=( $(find "$1" -name 'backup-*.tar.gz' -mtime "+$2") )
+		echo "$__backup_files"
 		for __file in "${__backup_files[@]}"; do
+			echo "Clearing $__file"
 			if ! rm -f "$__file" >> "$__LOGFILE"; then
 				((__failed++))
 			fi
