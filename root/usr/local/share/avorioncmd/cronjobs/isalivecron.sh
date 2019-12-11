@@ -15,7 +15,7 @@ function main () {
 		exit 0
 	fi
 
-	if [[ -f /tmp/runningavorionbackup ]]; then
+	if [[ -f /tmp/avorion.hangdetector ]]; then
 		exit 0
 	fi
 
@@ -34,13 +34,13 @@ function main () {
 	if (( "$(wc -c "$__cronoutput")" < 200 )) 2>&1; then
 		echo "Failed to connect. Restarting Avorion." >>/srv/avorion/serverstatus.log
 		$__AVORION_CMD restart "${__GALAXY}" >>/srv/avorion/serverstatus.log 2>&1
-		sed 's,.*,\t&,' "$__tmpfile" >>/srv/avorion/serverstatus.log
+		sed 's,.*,\t&,' <<< "$__cronoutput" >>/srv/avorion/serverstatus.log
 		__restarted=1
 	else
 		echo "Connected" >>/srv/avorion/serverstatus.log
 	fi
 
-	cat "$__tmpfile" >> /srv/avorion/serverstatus.log
+	echo "$__cronoutput" >> /srv/avorion/serverstatus.log
 	
 	__fintime="$(date +%s)"
 	echo "Log Closed @ $__fintime ($(date -d "@$__fintime" +%m-%d-%Y))" >> /srv/avorion/serverstatus.log
