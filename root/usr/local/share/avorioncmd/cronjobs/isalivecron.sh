@@ -31,7 +31,7 @@ function main () {
 	printf "Testing RCON..." >> /srv/avorion/serverstatus.log
 
 	__cronoutput="$(timeout "$__TIMEOUT" $__RCON -c "$__RCONHOSTFILE" -s "$__GALAXY" status)"
-	if (( "$(wc -c "$__cronoutput")" < 200 )) 2>&1; then
+	if (( "$(wc -c <<< "$__cronoutput")" < 200 )) 2>&1; then
 		echo "Failed to connect. Restarting Avorion." >>/srv/avorion/serverstatus.log
 		$__AVORION_CMD restart "${__GALAXY}" >>/srv/avorion/serverstatus.log 2>&1
 		sed 's,.*,\t&,' <<< "$__cronoutput" >>/srv/avorion/serverstatus.log
