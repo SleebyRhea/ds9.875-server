@@ -22,15 +22,15 @@ do
 
         -- Default Message Information
         m_sender   = "DS9 Admin Team",
-        m_text     = "Welcome to the DS9.875 Server! Here are some resources to get you going. If you have any questions, feel free to ask! Discord link: https://discord.gg/ZangShh",
+        m_text     = "Welcome to our Server! If you have any questions, feel free to ask!",
         m_header   = "Welcome to DS9.875!",
         m_file     = Server().folder .. "/MailText.txt",
 
         -- Resources
         r_money    = 100000,
-        r_iron     = 50000,
-        r_titanium = 50000,
-        r_naonite  = 50000,
+        r_iron     = 25000,
+        r_titanium = 25000,
+        r_naonite  = 5000,
         r_trinium  = 0,
         r_xanion   = 0,
         r_ogonite  = 0,
