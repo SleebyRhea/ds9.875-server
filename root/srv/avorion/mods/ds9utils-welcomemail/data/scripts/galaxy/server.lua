@@ -2,44 +2,149 @@ include("utility")
 include("stringutility")
 include("weapontype")
 
-vanilla_onPlayerCreated = onPlayerCreated
-vanilla_initialize = initialize
+do
+    local __old_path = package.path
+    local vanilla_initialize = initialize
+    local vanilla_onPlayerCreated = onPlayerCreated
 
-local turret = nil
+    package.path = package.path .. ";data/scripts/lib/?.lua"
+    package.path = package.path .. ";data/scripts/lib/?.lua"
+    package.path = package.path .. ";data/scripts/?.lua"
+    
+    include("utility")
+    include("stringutility")
+    include("callable")
+    
+    local __d = {
+        -- Mod Init
+        turret     = nil,
+        i_modname    = "ds9utils-welcomeemail",
 
---[[
---   Credit to Darenkal (Conico) of the DS9 Discord for
---   helping me get this working and working out how to get
---   good scaling for newbies!
---]]
--- function initialize()
---     vanilla_initialize()
+        -- Default Message Information
+        m_sender   = "DS9 Admin Team",
+        m_text     = "Welcome to the DS9.875 Server! Here are some resources to get you going. If you have any questions, feel free to ask! Discord link: https://discord.gg/ZangShh",
+        m_header   = "Welcome to DS9.875!",
+        m_file     = Server().folder .. "/MailText.txt",
 
---     --Sector x y and offset
---     local tx, ty, to = -200, -200, 275
+        -- Resources
+        r_money    = 100000,
+        r_iron     = 50000,
+        r_titanium = 50000,
+        r_naonite  = 50000,
+        r_trinium  = 0,
+        r_xanion   = 0,
+        r_ogonite  = 0,
+        r_avorion  = 0,
 
---     -- Rarity, and Type
---     local tr, tt = 2, WeaponType.RawMiningLaser
+        -- Turret Data
+        t_num      = 1,
+        t_mat      = Material(MaterialType.Naonite),
+        t_rarity   = Rarity(2),
+        t_type     = WeaponType.RawMiningLaser,
+        t_sec_x    = -200,
+        t_sec_y    = -200,
+        t_sec_o    = 2,
+    }
 
---     turret = include("turretgenerator").TurretGenerator.generateTurret(yx, ty, to, Rarity(tr), tt, Material(MaterialType.Naonite))
--- end
+    -- https://stackoverflow.com/questions/4990990/check-if-a-file-exists-with-lua
+    local function __does_file_exist(name)
+        local f=io.open(name,"r")
+        if f~=nil then io.close(f) return true else return false end
+    end
 
-function onPlayerCreated (index)
-    -- Call vanilla script
-    vanilla_onPlayerCreated(index)
+    -- Returns a newly generated turret using the data provided
+    local function __make_turret(__d)
+        local __stg = include("sectorturretgenerator")
+        return __stg(SectorSeed(__d.t_sec_x, __d.t_sec_y)):generate(
+            __d.t_sec_x,
+            __d.t_sec_y,
+            __d.t_sec_o,
+            __d.t_rarity,
+            __d.t_type,
+            __d.t_mat
+        )
+    end
 
-    local player = Player(index)
+    -- Initial turret generation; __d.turret is mostly used as a safeguard
+    -- in case turret generation breaks again.
+    function initialize()
+        vanilla_initialize()
+        __d.turret = __make_turret(__d)
+        if type(__d.turret) == "nil" then 
+            print("[${mod}] Generated turret is nil! Skipping turret email addition."%_T % {mod=__d.i_modname} )
+        else
+            print("[${mod}] Generated turret is of type <${t_type}>."%_T % {mod=__d.i_modname,t_type=type(__d.turret)} )
+        end
 
-    -- Resources
-    local iron, titanium, naonite, trinium, xanion, ogonite, avorion = 50000, 50000, 50000, 0, 0, 0, 0
+        print("[${mod}] Mail text file location is: ${m_file}"%_T % {mod=__d.i_modname, m_file=__d.m_file})
+    end
 
-    local mail = Mail()
-    mail.money = 100000
-    mail.sender = "DS9 Admin Team"
-    mail.header = "Welcome to DS9.875!"
-    mail.text = "Welcome to the DS9.875 Server! Here are some resources to get you going. If you have any questions, feel free to ask! Discord link: https://discord.gg/ZangShh"
-    -- mail:addTurret(turret)
-    mail:setResources(iron,titanium,naonite,trinium,xanion,ogonite,avorion)
+    function onPlayerCreated (index)
+        vanilla_onPlayerCreated(index)
 
-    player:addMail(mail)
+        local __player = Player(index)
+        local __mail = Mail()
+        local __msgfooter = "Used default text body."
+        local __turret, __mailfile = false, false
+
+        -- Adapted from DirtyRedzServer Manager. Override the default message if
+        -- a file called MailText.txt is present in the server directory and is
+        -- readable. We load this on demand so that we dont need to restart the
+        -- whole server to update our email
+        __mail.sender = __d.m_sender
+        __mail.header = __d.m_header
+        __mail.text   = __d.m_text
+        if __does_file_exist(__d.m_file) then
+            local FILE = assert(io.open(__d.m_file, "r"))
+            __mail.text = FILE:read("*all")
+            FILE:close()
+            FILE = nil
+
+            __mailfile = true
+        end
+
+        -- Resources
+        __mail.money  = __d.r_money
+        __mail:setResources(
+            __d.r_iron,
+            __d.r_titanium,
+            __d.r_naonite,
+            __d.r_trinium,
+            __d.r_xanion,
+            __d.r_ogonite,
+            __d.r_avorion
+        )
+
+        -- Make sure we **actually** generated the initial turret,
+        -- and then make sure that the number set to be given is
+        -- greater than 0 before adding it to the player.
+        if type(__d.turret) == "userdata" and __d.t_num > 0 then
+            __mail:addTurret(__d.turret)
+            
+            -- If the number mentioned is set higher than 1, generate
+            -- even more turrets and attach them to the email.
+            if __d.t_num > 1 then
+                for i=2, __d.t_num, 1 do
+                    __mail:addTurret(__make_turret(__d))
+                end
+            end
+
+            __turret = true
+        else
+            print("[${mod}] Skipped adding turret to player mail. Datatype is incorrect: <%{t_type}>"%_T % {mod=__d.i_modname, t_type=type(__d.turret)} )
+        end
+        
+        if __mailfile then
+            __msgfooter = "Used <"..__d.m_file.."> for mail text."
+        end
+
+        if __turret then
+            __msgfooter = __msgfooter.." Attached "..__d.t_num.." turret[s]"
+        end
+
+        __player:addMail(__mail)
+        print("[${mod}] Sent welcome email to <${pname}>. ${footer}"%_T % {mod=__d.i_modname,pname=__player.name,footer=__msgfooter} )
+    end
+
+    package.path = __old_path
 end
