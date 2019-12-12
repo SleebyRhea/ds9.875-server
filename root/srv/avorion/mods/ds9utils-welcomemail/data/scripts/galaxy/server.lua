@@ -3,12 +3,13 @@
     DS9 Utilities - Welcome Email
     -----------------------------
     Sends off an email to a newly joined player using either the defaults
-    provided below, or via a MailText.txt file located in the Server root
-    directory. Also optionally (and by default) adds one or more turrets
-    of your spefication to the email as an attachment.
+    provided below, or via a WelcomeEmail.txt file located in the Server
+    root directory. Also optionally (and by default) adds one or more
+    turrets of your spefication to the email as an attachment.
 
     Licensed under the "BSD-3-Clause" license
 ]]
+
 do
     local __old_path = package.path
     local vanilla_initialize = initialize
@@ -31,7 +32,7 @@ do
         m_sender   = "DS9 Admin Team",
         m_text     = "Welcome to our Server! If you have any questions, feel free to ask!",
         m_header   = "Welcome to DS9.875!",
-        m_file     = Server().folder .. "/MailText.txt",
+        m_file     = Server().folder .. "/WelcomeEmail.txt",
 
         -- Resources
         r_money    = 100000,
@@ -95,7 +96,7 @@ do
         local __turret, __mailfile = false, false
 
         -- Adapted from DirtyRedzServer Manager. Override the default message if
-        -- a file called MailText.txt is present in the server directory and is
+        -- a file called WelcomeEmail.txt is present in the server directory and is
         -- readable. We load this on demand so that we dont need to restart the
         -- whole server to update our email
         __mail.sender = __d.m_sender
