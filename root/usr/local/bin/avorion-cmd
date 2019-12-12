@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-CMDVERS='2.0-testing rev13'
+CMDVERS='2.0-testing rev14'
 CMDNAME="$(basename "$0")"
 EDATE="$(date +%s)"
 VERBOSE=0
 NOSCREENCHECK=0
-VALIDCMDS='stop|start|restart|showinstances|view|attach|exec|update|resetsectors|usage|config|version'
+VALIDCMDS='stop|start|restart|showinstances|view|attach|exec|update|resetsectors|usage|config|version|downloadupdate'
 VALIDSWCHS='-I|-h|-u|--help|-V|--version'
 DOALL=0
 
@@ -84,11 +84,6 @@ function __validate_setting_conf () {
 	__conf_vars[AVORION_BAKDIR]='^\/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
 	__conf_vars[AVORION_STEAMID]='^[0-9][0-9]*$'
 	__conf_vars[STEAMCMD_BIN]='^(/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/\.]*[a-zA-Z0-9]|steamcmd)$'
-
-	# Leaving this here for now, but this used to check for invalid options
-	# being set in the configuration file
-	# grep -qcvE "^(($(printf '%s' "${!__conf_vars[*]}" | tr ' ' '|'))=.*|\\s*)" /etc/avorionsettings.conf >/dev/null \
-	#	|| return 1
 
 	local i=0
 	while read -r __l; do
@@ -365,11 +360,17 @@ function __check_incompatible_modlist () {
 	local __avorion_version_string __instdir __modlist __pass __inst_comma __warn
 	local __curmaxverstring __newmaxverstring __curminverstring __newminverstring
 	local __minstring __maxstring __verbose_version_checks __fail_count __color
-	local __verbose_version_checks __newinstlist __curinstlist
+	local __verbose_version_checks __newinstlist __curinstlist __auto_run
 
 	__warn=''
 	__avorion_version_string="$1"
 	__verbose_version_checks=0
+	__auto_run=0
+
+	## Are we doing an auto-update?
+	if [[ "$2" == '--auto' ]]; then
+		__auto_run=1
+	fi
 
 	# Get the list of directories that contain a modded
 	# installation.
@@ -567,11 +568,15 @@ function __perform_update () {
 	local -a _units
 	local _inst _steamcmd _updatedir _failed _instdir __x
 	local __newversion __oldversion __oldgrp __oldusr __oldhome
-	local __steamcmd_command_string
+	local __steamcmd_command_string __auto_update __do_auto
 
 	_updatedir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	_currentdir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}"
 	_failed=0
+	__auto_update=0
+
+	## No point in continuing if the service directory doesnt exist/cant be accessed.
+	cd "$AVORION_SERVICEDIR" >/dev/null 2>&1 || die "Failed to cd into service directory <$AVORION_SERVICEDIR>"
 
 	# Quick check to make sure that SteamCMD is present either
 	# in steamcmd or steamcmd.sh form
@@ -594,6 +599,27 @@ function __perform_update () {
 		die "Update process already running, or a stale lock is present (/tmp/avorion/updatingavorion.lock)."
 	fi
 
+	if [[ ! -d "$_updatedir" ]]; then
+		if [[ -e "$_updatedir" ]]; then
+			rm "$_updatedir" || die "Cannot remove bad update directory! <$_updatedir>"
+		fi
+
+		if ! mkdir "$_updatedir"; then
+			die "Cannot create update directory!"
+		fi
+	fi
+
+	if [[ "$2" == "--auto" ]]; then
+		__auto_update=1
+	fi
+
+	## Create a file called avorion.updatestatus that will house the current
+	## state of the Avorion update run. 
+	if (( __auto_update > 0 )); then
+		sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'updating:auto' > '$_updatedir/avorion.updatestatus'"
+		__do_auto="--auto"
+	fi
+
 	sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" -n touch /tmp/avorion/updatingavorion.lock ||\
 		die "Unable to create avorion lockfile! Check /tmp usage." &&\
 		printf "${__f_white}Updates locked.${__t_clear}\n"
@@ -604,26 +630,31 @@ function __perform_update () {
 	## trap run.
 	trap 'echo
 		trap - EXIT TERM INT
+		[[ -f $AVORION_SERVICEDIR/$AVORION_BINDIR/avorion.updatestatus ]] &&\
+			rm "$AVORION_SERVICEDIR/$AVORION_BINDIR/avorion.updatestatus"
 		sudo -n -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" rm /tmp/avorion/updatingavorion.lock &&\
 			printf "${__f_white}Updates unlocked${__t_clear}\n" ||\
 			printf "${__f_red}Failed to unlock updates${__t_clear}\n"
-		exit $?' TERM EXIT INT 
+		exit $?' TERM EXIT INT
 
-	# Queries the systemd bus for active avorion@ galaxies and saves them
-	printf "${__f_white}Checking for active Avorion galaxies...${__t_clear}"
-	_units=( $(systemctl list-units 'avorion@*' | grep "$__unit_string" | awk '{print $1}') )
-	printf "${__f_white}Found %s\n${__t_clear}" "${#_units[@]}"
+	# If there were any active galaxies, stop them **if** we are going to actually
+	# finish the update. If not, leave them running.
+	if (( __auto_update < 1 )); then
+		# Queries the systemd bus for active avorion@ galaxies and saves them
+		printf "${__f_white}Checking for active Avorion galaxies...${__t_clear}"
+		_units=( $(systemctl list-units 'avorion@*' | grep "$__unit_string" | awk '{print $1}') )
+		printf "${__f_white}Found %s\n${__t_clear}" "${#_units[@]}"
 
-	# If there were any active galaxies, stop them.
-	if (( "${#_units[@]}" > 0 )); then
-		for _inst in "${_units[@]}"; do
-			_inst="${_inst%%.service}"
-			_inst="${_inst##avorion@}"
-			printf "${__f_lgray}>> Pausing <%s>${__t_clear}\n" "$_inst"
-			__stop_avorion_instance "${_inst}" >/dev/null
-		done
+		if (( "${#_units[@]}" > 0 )); then
+			for _inst in "${_units[@]}"; do
+				_inst="${_inst%%.service}"
+				_inst="${_inst##avorion@}"
+				printf "${__f_lgray}>> Pausing <%s>${__t_clear}\n" "$_inst"
+				__stop_avorion_instance "${_inst}" >/dev/null
+			done
+		fi
 	fi
-	
+
 	## Overwrite default environment to fix sudo+steamcmd stupidity
 	__oldgrp="$GROUP"
 	__oldusr="$USER"
@@ -632,7 +663,6 @@ function __perform_update () {
 	export GROUP="$AVORION_ADMIN_GRP"
 	export HOME="$AVORION_SERVICEDIR"
 
-	cd "$AVORION_SERVICEDIR" >/dev/null 2>&1 || die "Failed to cd into service directory <$AVORION_SERVICEDIR>"
 	# Download the latest version to: "${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	# ex: /srv/avorion/server_dir.updatefiles
 	#
@@ -657,6 +687,7 @@ function __perform_update () {
 	export HOME="$__oldhome"
 	export GROUP="$__oldgrp"
 
+	## No point in continuing if the download failed
 	if (( _failed > 0 )) || [[ ! -f "$_updatedir"/bin/AvorionServer ]]; then
 		if [[ -d "$_updatedir" ]]; then
 			rm -rf "$_updatedir" >/dev/null 2>&1
@@ -668,61 +699,82 @@ function __perform_update () {
 	__newversion="$( "$_updatedir"/bin/AvorionServer --version | tr -dc '[0-9.\*]')"
 
 	printf "${__f_white}\n"
-	if yesno "Would you like to check for incompatible mods?"; then
-		if ! __check_incompatible_modlist "$__newversion"; then
+	if (( __auto_update > 0 )) || yesno "Would you like to check for incompatible mods?"; then
+		if ! __check_incompatible_modlist "$__newversion" $__do_auto; then
 			printf "${__f_white}\n"
-			if ! yesno "Incompatible mods found, would you still like to proceed?"; then
+			if  (( __auto_update < 1 )) && ! yesno "Incompatible mods found, would you still like to proceed?"; then
 				printf "Removing update files and aborting.\n"
 				rm -rf "$_updatedir" >/dev/null
 				exit 1
 			fi
-		fi
-	fi
 
-	printf "${__t_clear}\n"
-	# If there is prior server data, move that to a backup, just in case.
-	if [[ -d "$_currentdir" ]]; then
-		__oldversion="$( "$_currentdir"/bin/AvorionServer --version | tr -dc '[0-9.\*]')"
-		if [[ -d "${_currentdir}.updatebak-${__oldversion}" ]]; then
-			rm -rf "${_currentdir}.updatebak-${__oldversion}" >/dev/null
-		fi
-		printf "${__f_white}Backing up old server version to <${_currentdir}.updatebak-${__oldversion}>${__t_clear}\n"
-		mv --strip-trailing-slashes -T "$_currentdir" "${_currentdir}.updatebak-${__oldversion}" >/dev/null 2>&1
-	fi
-
-	# Attempt to move the updated data to its final destination. Upon failure,
-	# attempt to revert, and exit
-	if ! mv --strip-trailing-slashes -T "$_updatedir" "$_currentdir"; then
-		printf "${__f_lred}>> Unable to move update data to ${_currentdir}!${$__t_clear}"
-		if [[ -n "$__oldversion" ]] && [[ -d "${_currentdir}.updatebak-${__oldversion}" ]]; then
-			rm -rf "$_updatedir"
-			mv --strip-trailing-slashes -T "${_currentdir}.updatebak-${__oldversion}" "${_currentdir}" ||\
-				printf "${__f_lred}>> Failed to revert changes to ${_currentdir}!${__t_clear}"
-		fi
-		
-		die "Aborting."
-	fi
-
-	# If any instances were up prior to the update, re-start them
-	if (( "${#_units[@]}" > 0 )); then
-		printf "${__f_white}Attempting to restart services${__t_clear}\n"
-		for _inst in "${_units[@]}"; do
-			_inst="${_inst%%.service}"
-			_inst="${_inst##avorion@}"
-			printf "${__f_lgray}>> Restarting <%s>...${__t_clear}" "$_inst"
-			if ! __start_avorion_instance --suppress-output "${_inst}"; then
-				(( _failed++ ))
-				printf "${__f_lred}FAILED${__t_clear}\n"
-				continue
+			## If this was an auto-update run, then create a touchfile that the system
+			## will later use to determine whether or not updates are complete and
+			## ready to go.
+			if (( __auto_update > 0 )); then
+				sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'complete:wontstart:brokenmods' > '$_updatedir/avorion.updatestatus'"
+				die "Update downloaded, but detected broken mod versions."
 			fi
-
-			printf "${__f_lgreen}SUCCESS${__t_clear}\n"
-		done
+		fi
 	fi
+	printf "${__t_clear}\n"
 
-	if (( _failed > 0 )); then
-		printf "\n$_failed galaxy instance$(plural "$_failed") failed to start!\n"
-		exit 1
+	if (( __auto_update < 1 )); then
+		# If there is prior server data, move that to a backup, just in case.
+		if [[ -d "$_currentdir" ]]; then
+			__oldversion="$( "$_currentdir"/bin/AvorionServer --version | tr -dc '[0-9.\*]')"
+			if [[ -d "${_currentdir}.updatebak-${__oldversion}" ]]; then
+				rm -rf "${_currentdir}.updatebak-${__oldversion}" >/dev/null
+			fi
+			printf "${__f_white}Backing up old server version to <${_currentdir}.updatebak-${__oldversion}>${__t_clear}\n"
+			mv --strip-trailing-slashes -T "$_currentdir" "${_currentdir}.updatebak-${__oldversion}" >/dev/null 2>&1
+		fi
+
+		# Attempt to move the updated data to its final destination. Upon failure,
+		# attempt to revert, and exit
+		if ! mv --strip-trailing-slashes -T "$_updatedir" "$_currentdir"; then
+			printf "${__f_lred}>> Unable to move update data to ${_currentdir}!${$__t_clear}"
+			if [[ -n "$__oldversion" ]] && [[ -d "${_currentdir}.updatebak-${__oldversion}" ]]; then
+				rm -rf "$_updatedir"
+				mv --strip-trailing-slashes -T "${_currentdir}.updatebak-${__oldversion}" "${_currentdir}" ||\
+					printf "${__f_lred}>> Failed to revert changes to ${_currentdir}!${__t_clear}"
+			fi
+			
+			die "Aborting."
+		fi
+
+		# If any instances were up prior to the update, re-start them
+		if (( "${#_units[@]}" > 0 )); then
+			printf "${__f_white}Attempting to restart services${__t_clear}\n"
+			for _inst in "${_units[@]}"; do
+				_inst="${_inst%%.service}"
+				_inst="${_inst##avorion@}"
+				printf "${__f_lgray}>> Restarting <%s>...${__t_clear}" "$_inst"
+				if ! __start_avorion_instance --suppress-output "${_inst}"; then
+					(( _failed++ ))
+					printf "${__f_lred}FAILED${__t_clear}\n"
+					continue
+				fi
+
+				printf "${__f_lgreen}SUCCESS${__t_clear}\n"
+			done
+		fi
+
+		if (( _failed > 0 )); then
+			printf "\n$_failed galaxy instance$(plural "$_failed") failed to start!\n"
+			exit 1
+		fi
+	else
+		if (( _failed < 1 )); then
+			printf "\nAuto update complete, and ready for installation.\n"
+			sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'complete:success' > '$_updatedir/avorion.updatestatus'"
+		else
+			printf "\nAuto update failed!\n"
+			if [[ -f "$_updatedir" ]]; then
+				sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'complete:failed' > '$_updatedir/avorion.updatestatus'"
+			fi
+			exit 1
+		fi
 	fi
 
 	exit 0
@@ -1064,6 +1116,13 @@ function main () {
 				exit 1 &&\
 				exit 0
 			;;
+
+		downloadupdate )
+			die "Not complete"
+			__perform_update --auto ||\
+				exit 1 &&\
+				exit 0
+			;;
 		
 		showinstances | -I | status)
 			__show_service_instances ||\
@@ -1171,6 +1230,18 @@ Commands:
 		Force a server update to the latest version. Also prompts the
 		user to check for mod version conflicts if any modded galaxies
 		are found.
+
+	downloadupdate
+		${CMDNAME} downloadupdate
+		Download the newest update for Avorion (if there is one) and
+		check for mod incompatibilies. Does *not* replace the currect
+		Avorion binary with the new update, but leaves the update to
+		be installed on the next restart should there be no issues
+		found during the update process.
+
+		This command is intended for service use **only** but is left
+		here for debug purposes. Please bear in mind that this command
+		may not work for you, for this reason.
 _EOF_
 			exit 0
 			;;
