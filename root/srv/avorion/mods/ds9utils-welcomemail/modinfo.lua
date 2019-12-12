@@ -4,11 +4,13 @@ meta =
     name =             "ds9875WelcomeEmail",
     title =            "DS9.875 Utils: Welcome Email",
     description =      "Adds a sends a welcome email with a turret and some resources to players on creation",
+    
+    -- Thanks to Darenkal for assisting me with the original version of this mod!
     authors =          {"ds9.875-team","Darenkal (Conico)"},
-    version =          "0.1",
+    version =          "2.0",
     dependencies =     { {id = "Avorion", min = "0.23"} },
     serverSideOnly =   true,
     clientSideOnly =   false,
     saveGameAltering = false,
-    contact =          "@Cyberpunker#3611",
+    contact =          "@Sleepy Fugu#3611",
 }
