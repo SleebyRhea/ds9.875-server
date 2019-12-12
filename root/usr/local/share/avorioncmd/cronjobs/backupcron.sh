@@ -5,7 +5,7 @@ declare __LASTBACKUP=''
 declare __LOGFILE=''
 declare __SKIPBACKUP=0
 declare __ETIME="$(date +%s)"
-declare __MESSAGE='Server backup starts in'
+declare __MESSAGE='[NOTIFICATION] Server backup starts in'
 declare __RETENTION=7
 
 function main() {
