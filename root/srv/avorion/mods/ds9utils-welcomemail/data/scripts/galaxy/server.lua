@@ -30,8 +30,8 @@ do
 
         -- Default Message Information
         m_sender   = "DS9 Admin Team",
-        m_text     = "Welcome to our Server! If you have any questions, feel free to ask!",
         m_header   = "Welcome to DS9.875!",
+        m_text     = "Welcome to our Server! If you have any questions, feel free to ask!",
         m_file     = Server().folder .. "/WelcomeEmail.txt",
 
         -- Resources
@@ -46,7 +46,7 @@ do
 
         -- Turret Data
         t_num      = 1,
-        t_mat      = Material(MaterialType.Naonite),
+        t_mat      = Material(MaterialType.Titanium),
         t_rarity   = Rarity(2),
         t_type     = WeaponType.RawMiningLaser,
         t_sec_x    = -200,
