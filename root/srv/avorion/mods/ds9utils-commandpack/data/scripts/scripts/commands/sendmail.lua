@@ -1,5 +1,14 @@
 package.path = package.path .. ";data/scripts/lib/?.lua"
 
+local __err = {
+    no_arg = "Please provide an argument",
+}
+
+local __modinfo = {
+    i_modname = "ds9utils-commandpack",
+    i_commandname = "sendmail",
+}
+
 function getDescription()
     return "Sends mail via command."
 end
@@ -9,7 +18,7 @@ function getHelp()
 end
 
 do
-    local function __send_email(__id, __m)
+    local function __sendEmail(__id, __m)
         local __plr = Player(sender)
         local __mail = Mail()
 
@@ -31,11 +40,18 @@ do
         __plr:addMail(mail)
     end
 
-    local function __add_all_players(__rcpt, __d)
-        if Server():sender
+    local function __getTblLen(__tbl)
+        local c = 0
+        for _, _ in pairs(__tbl) do c=c+1 end
+        return c
     end
 
-    local function __add_player(__rcpt, __d)
+    local function __addAllPlayers(__rcpt, __d)
+        if Server():hasAdminPrivileges(sender) then
+        end
+    end
+
+    local function __addPlayer(__rcpt, __d)
         if __rcpt == "+all" then
             return __add_all_players()
         end
@@ -45,7 +61,7 @@ do
         end
     end
 
-    local function __add_resource(__msg, __res, __cnt)
+    local function __addResource(__msg, __res, __cnt)
         if not type(__res) == "string" or not __msg["r_"..__res] then
             return false, "Resource name is invalid: <${res}>"%_T % {res=tostring(__res)}
         end
@@ -62,25 +78,51 @@ do
         return true, "Sent ${amount} ${res}"%_T % {amount=__cnt, res=__res}
     end
 
-    local __mapped_options = {
-        "-p" = __add_player,
-        "-r" = __add_resource,
-        "-f" = __set_message_file
-    }
+    local function __setHeader(__d)
+    end
+
+    local function __setFile()
+    end
+
+    local function __setText()
+    end
+
+    -- Returns a table with the available commands and their mapped
+    -- functions IF the user of the command is permitted to use it
+    local function __getAvailableArguments(sender)
+        local PERMITTED = false
+        local __server = Server()
+        local __sender = Player(sender)
+        
+        local __data = {
+            __args = {},
+            __func_map = {}
+        }
+
+        if __server:hasAdminPrivileges(__sender) then
+            PERMITTED = true
+
+            table.insert(__data.__args, "-p", "Adds a player")
+            table.insert(__data.__args, "-f", "Specify the file (stored in ${dir} to use for the email"%_T % {dir=})
+        elseif 
+
+        -- Only return if the user has permission to even use
+        -- this command in the first place
+        return ( PERMITTED and __data or false )
+    end
 
     function execute(sender, commandName, ...)
-        -- Make sure that we have a set of recipients
         if not ... then
-            return 1, "", getHelp() 
+            return 1, "", __err.no_arg 
         end
 
         -- Initilize our message data
         local __rcpt = {}
         local __msg = {
             -- Message data
-            m_header     = ( __subject or "Test Message"),
-            m_sender     = ( __from or "Server"),
-            m_text       = ( __text or "Test message please ignore."),
+            m_header     = "Test Message",
+            m_sender     = "Server",
+            m_text       = "Test message please ignore.",
 
             -- Resources
             r_credits    = 0,
@@ -96,6 +138,8 @@ do
             f_do_resources_send = false,
         }
 
+        local __valid_arguments = __getAvailableArguments(sender)
+
         do
             local __command_data = {}
             for i, v in ipairs({...}) do
@@ -103,12 +147,12 @@ do
             end
         end
 
-        if __get_tbl_len(__rcpt) < 1 then
+        if __getTblLen(__rcpt) < 1 then
             return 1, "Please supply a valid recipient"
         end
 
         for i, __id in ipairs(__rcpt) do
-            __send_email(__id, __msg)
+            __sendEmail(__id, __msg)
         end        
 
         return 0, "", ""
