@@ -52,5 +52,5 @@ meta =
     saveGameAltering = true,
 
     -- Contact info for other users to reach you in case they have questions
-    contact = "",
+    contact = "@Sleepy Fugu#3611",
 }

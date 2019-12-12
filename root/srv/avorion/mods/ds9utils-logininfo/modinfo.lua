@@ -10,5 +10,5 @@ meta =
     serverSideOnly =   true,
     clientSideOnly =   false,
     saveGameAltering = true,
-    contact =          "@Cyberpunker#3611",
+    contact =          "@Sleepy Fugu#3611",
 }
