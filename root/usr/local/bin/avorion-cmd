@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-CMDVERS='2.0-testing rev12'
+CMDVERS='2.0-testing rev13'
 CMDNAME="$(basename "$0")"
 EDATE="$(date +%s)"
 VERBOSE=0
@@ -853,6 +853,10 @@ function __perform_sector_reset () {
 #	instances. Then, print them (formatted) to the screen
 #	and exit
 function __show_service_instances () {
+	if ! [[ -f "${AVORION_SERVICEDIR}/${AVORION_BINDIR}/bin/AvorionServer" ]]; then
+		die "Avorion binary not found at <${AVORION_SERVICEDIR}/${AVORION_BINDIR}/bin/AvorionServer>"
+	fi
+
 	local __inst __dir
 	local __padlimit=80
 	local __pad="$(printf '%*s' "$__padlimit")"
@@ -860,6 +864,12 @@ function __show_service_instances () {
 	local __strstat=Status
 	local __strinst=Galaxy
 	local __strserv __status __color
+	local __version="$( ${AVORION_SERVICEDIR}/${AVORION_BINDIR}/bin/AvorionServer --version )"
+
+
+	if [[ -z "${__version}" ]]; then
+		die "Avorion binary <${AVORION_SERVICEDIR}/${AVORION_BINDIR}/bin/AvorionServer> didnt return version info (received empty response)"
+	fi
 
 	if (( $(find "${AVORION_SERVICEDIR}"/* -maxdepth 1 -name 'server.ini' -printf . | wc -c) < 1 )); then 
 		echo "No galaxies are configured in <$AVORION_SERVICEDIR>"
@@ -871,6 +881,7 @@ function __show_service_instances () {
 	printf "${__f_white}Avorion Commander v%s\n\n" "$CMDVERS" 
 	printf "${__f_white}Service Location: %s\n" "$AVORION_SERVICEDIR/<galaxy>"
 	printf "${__f_white}Backups Location: %s\n" "$AVORION_BAKDIR"
+	printf "${__f_white}Avorion Version:  %s\n" "$__version"
 	printf '\n'
 	printf "${__f_black}${__b_white}${__strinst}%*.*s%s     ${__t_clear}\n" 0 $(( __padlength - ${#__strinst} )) \
 		"${__pad}" \
