@@ -359,12 +359,11 @@ function __check_incompatible_modlist () {
 	declare -A __mod_data __modded_insts
 	local __avorion_version_string __instdir __modlist __pass __inst_comma __warn
 	local __curmaxverstring __newmaxverstring __curminverstring __newminverstring
-	local __minstring __maxstring __verbose_version_checks __fail_count __color
-	local __verbose_version_checks __newinstlist __curinstlist __auto_run
+	local __minstring __maxstring __fail_count __color __auto_run
+	local __newinstlist __curinstlist 
 
 	__warn=''
 	__avorion_version_string="$1"
-	__verbose_version_checks=0
 	__auto_run=0
 
 	## Are we doing an auto-update?
@@ -487,8 +486,7 @@ function __check_incompatible_modlist () {
 	
 	printf "${__f_white}Ready\n"
 
-	if yesno "Would you like verbose output?"; then
-		__verbose_version_checks=1
+	if (( __auto_run > 0 )) || yesno "Would you like verbose output?"; then
 		__warn='--warn'
 	fi
 
@@ -609,7 +607,7 @@ function __perform_update () {
 		fi
 	fi
 
-	if [[ "$2" == "--auto" ]]; then
+	if [[ "$1" == "--auto" ]]; then
 		__auto_update=1
 	fi
 
@@ -761,18 +759,19 @@ function __perform_update () {
 		fi
 
 		if (( _failed > 0 )); then
-			printf "\n$_failed galaxy instance$(plural "$_failed") failed to start!\n"
+			printf "${__f_lred}\n$_failed galaxy instance$(plural "$_failed") failed to start!${__t_clear}\n"
 			exit 1
 		fi
 	else
 		if (( _failed < 1 )); then
-			printf "\nAuto update complete, and ready for installation.\n"
+			printf "${__f_white}\nAuto update complete, and ready for installation.\n"
 			sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'complete:success' > '$_updatedir/avorion.updatestatus'"
 		else
 			printf "\nAuto update failed!\n"
 			if [[ -f "$_updatedir" ]]; then
 				sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'complete:failed' > '$_updatedir/avorion.updatestatus'"
 			fi
+			printf "\n"
 			exit 1
 		fi
 	fi
@@ -1118,7 +1117,7 @@ function main () {
 			;;
 
 		downloadupdate )
-			die "Not complete"
+			#die "Not complete"
 			__perform_update --auto ||\
 				exit 1 &&\
 				exit 0
