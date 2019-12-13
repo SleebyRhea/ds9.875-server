@@ -180,7 +180,7 @@ function __set_tmux_instance () {
 #	Set various global values, and declare
 #	other unset globals
 function __set_globals () {
-	declare _tmuxsess _tmuxsock _instdir __allowed
+	declare _tmuxsess _tmuxsock __allowed
 	
 	## Universal
 	readonly __t_clear='\033[0m' ## Clear Text Props
@@ -564,9 +564,9 @@ function __check_incompatible_modlist () {
 #	present on the system.
 function __perform_update () {
 	local -a _units
-	local _inst _steamcmd _updatedir _failed _instdir __x
-	local __newversion __oldversion __oldgrp __oldusr __oldhome
-	local __steamcmd_command_string __auto_update __do_auto
+	local _inst _steamcmd _updatedir _failed __newversion
+	local __oldversion __oldgrp __oldusr __oldhome __do_auto
+	local __steamcmd_command_string __auto_update 
 
 	_updatedir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	_currentdir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}"
@@ -614,7 +614,7 @@ function __perform_update () {
 	## Create a file called avorion.updatestatus that will house the current
 	## state of the Avorion update run. 
 	if (( __auto_update > 0 )); then
-		sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'updating:auto' > '$_updatedir/avorion.updatestatus'"
+		sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'updating:auto:' > '$_updatedir/avorion.updatestatus'"
 		__do_auto="--auto"
 	fi
 
@@ -765,11 +765,11 @@ function __perform_update () {
 	else
 		if (( _failed < 1 )); then
 			printf "${__f_white}\nAuto update complete, and ready for installation.\n"
-			sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'complete:success' > '$_updatedir/avorion.updatestatus'"
+			sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'complete:success:' > '$_updatedir/avorion.updatestatus'"
 		else
-			printf "\nAuto update failed!\n"
+			printf "\nAuto update failed! (Unknown reason)\n"
 			if [[ -f "$_updatedir" ]]; then
-				sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'complete:failed' > '$_updatedir/avorion.updatestatus'"
+				sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'complete:failed:unknown' > '$_updatedir/avorion.updatestatus'"
 			fi
 			printf "\n"
 			exit 1
