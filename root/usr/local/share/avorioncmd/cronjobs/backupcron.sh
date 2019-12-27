@@ -5,8 +5,8 @@ declare __LASTBACKUP=''
 declare __LOGFILE=''
 declare __SKIPBACKUP=0
 declare __ETIME="$(date +%s)"
-declare __MESSAGE='[NOTIFICATION] Server backup starts in'
-declare __RETENTION=7
+declare __MESSAGE='Server backup starts in'
+declare __RETENTION=2
 
 function main() {
 	__validate_setting_conf &&\
@@ -14,12 +14,14 @@ function main() {
 
 	## Prevent backups from being taken if its been less than
 	## 24 hours
-	if [[ -f "$AVORION_BAKDIR/lastfullbackup" ]]; then
-		__LASTBACKUP="$(cat "$AVORION_BAKDIR/lastfullbackup" | tr -d '\n')"
-		printf 'Last Backup: %s\n' "$__LASTBACKUP"
-		if (( $((__ETIME - __LASTBACKUP)) < 86400 )); then
-			__SKIPBACKUP=1
-			__MESSAGE='Server restart starts in'
+	if (( __SKIPBACKUP < 1 )); then
+		if [[ -f "$AVORION_BAKDIR/lastfullbackup" ]]; then
+			__LASTBACKUP="$(cat "$AVORION_BAKDIR/lastfullbackup" | tr -d '\n')"
+			printf 'Last Backup: %s\n' "$__LASTBACKUP"
+			if (( $((__ETIME - __LASTBACKUP)) < 86400 )); then
+				__SKIPBACKUP=1
+				__MESSAGE='Server restart starts in'
+			fi
 		fi
 	fi
 
