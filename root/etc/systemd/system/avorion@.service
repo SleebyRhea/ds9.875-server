@@ -1,6 +1,6 @@
 [Unit]
 Description=Avorion Server: %i
-After=network.target nfsshare.service
+After=network.target
 PartOf=avorionservers.target
 
 [Service]
