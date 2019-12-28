@@ -1,0 +1,12 @@
+[Unit]
+Description=Remote NFS Share
+After=network.target
+
+[Mount]
+What=sibyl.xtnet.link:/nfs/backups/sleepybackup
+Where=/backup
+Type=nfs
+Options=_netdev,auto
+
+[Install]
+WantedBy=multi-user.target

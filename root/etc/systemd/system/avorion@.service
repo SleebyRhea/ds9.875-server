@@ -1,6 +1,6 @@
 [Unit]
 Description=Avorion Server: %i
-After=steamcmd.target
+After=network.target nfsshare.service
 PartOf=avorionservers.target
 
 [Service]
