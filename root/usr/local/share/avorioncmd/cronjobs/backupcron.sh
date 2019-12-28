@@ -7,6 +7,7 @@ declare __SKIPBACKUP=0
 declare __ETIME="$(date +%s)"
 declare __MESSAGE='Server backup starts in'
 declare __RETENTION=2
+declare __BACKUPTIMER=86400 #Seconds
 
 function main() {
 	__validate_setting_conf &&\
@@ -18,7 +19,7 @@ function main() {
 		if [[ -f "$AVORION_BAKDIR/lastfullbackup" ]]; then
 			__LASTBACKUP="$(cat "$AVORION_BAKDIR/lastfullbackup" | tr -d '\n')"
 			printf 'Last Backup: %s\n' "$__LASTBACKUP"
-			if (( $((__ETIME - __LASTBACKUP)) < 86400 )); then
+			if (( $((__ETIME - __LASTBACKUP)) < __BACKUPTIMER )); then
 				__SKIPBACKUP=1
 				__MESSAGE='Server restart starts in'
 			fi
@@ -140,13 +141,8 @@ function __perform_backup_rotation () {
 	echo "Retention is $2"
 
 	## Check if the number of files is greater than our retention. If it is, its
-	## time to rotate
+	## time to try and rotate. Otherwise, we dont bother.
 	if (( ${#__backup_files[@]} > $2 )); then
-
-		## Acquire a new list of backups. We need to exclude the last n ($2) backups
-		## from the list, as they are the most recent and *must* be kept. So, we reverse
-		## the output using tac and delete the first 1 to n lines of output. We then overwrite
-		## our previous array with the new files and delete everything left.
 		__backup_files=( $(find "$1" -name 'backup-*.tar.gz' -mtime "+$2") )
 		echo "$__backup_files"
 		for __file in "${__backup_files[@]}"; do
@@ -155,6 +151,8 @@ function __perform_backup_rotation () {
 				((__failed++))
 			fi
 		done
+	else
+		echo "Skipping backup check, as number of backups present is lower than our retention of $2"
 	fi
 
 	return "$__failed"
