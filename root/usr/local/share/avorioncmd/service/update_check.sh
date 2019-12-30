@@ -17,11 +17,15 @@ function main() {
 
     if ! __check_update_status; then
         case "$?" in
-            200 | 300 ) exit "0" ;;
+            200 | 203 ) exit "0" ;;
         esac
     fi
 
     __check_for_steam_update
+    if __check_update_status; then 
+        echo "Update failed!" >&2
+    fi
+    exit "$?"
 }
 
 function __enqueue_restart() {
@@ -119,11 +123,11 @@ function __check_update_status() {
         updating:*)
             if __is_locked; then
                 echo "Updates are already being processed."
-                return 300
+                return 203
             fi
 
             echo "Updates were halted before they could finish on the last run! Requiring updates."
-            return 301
+            return 204
             ;;
     esac
 }

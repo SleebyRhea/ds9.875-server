@@ -20,7 +20,7 @@ ProtectControlGroups=true
 
 ; This should be set to the Steam64 ID for the
 ; primary server administrator
-Environment=ADMIN=123123
+Environment=ADMIN=1
 Environment=RETENTION=7
 Environment=LOGFILE=/srv/avorion/%i/serverlog-current.log
 Environment=COMPOSITELOGFILE=/srv/avorion/%i/serverlog-concatenated.log

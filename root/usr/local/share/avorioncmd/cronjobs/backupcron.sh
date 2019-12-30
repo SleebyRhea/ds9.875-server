@@ -1,41 +1,42 @@
 #! /usr/bin/env bash
 
+source /usr/local/share/avorioncmd/common/common.sh
+
 declare __AVORIONCMD="/usr/local/bin/avorion-cmd"
 declare __LASTBACKUP=''
 declare __LOGFILE=''
 declare __SKIPBACKUP=0
 declare __ETIME="$(date +%s)"
-declare __MESSAGE='Server backup starts in'
-declare __RETENTION=2
+declare __MESSAGE='[NOTIFICATION] Server backup starts in'
+declare __RETENTION=7
 declare __BACKUPTIMER=86400 #Seconds
 
 function main() {
-	__validate_setting_conf &&\
-		source /etc/avorionsettings.conf
-
-	## Prevent backups from being taken if its been less than
-	## 24 hours
+	## Prevent backups from being taken if its been less than 24 hours, or if
+	## backups have been disabled
 	if (( __SKIPBACKUP < 1 )); then
 		if [[ -f "$AVORION_BAKDIR/lastfullbackup" ]]; then
 			__LASTBACKUP="$(cat "$AVORION_BAKDIR/lastfullbackup" | tr -d '\n')"
 			printf 'Last Backup: %s\n' "$__LASTBACKUP"
-			if (( $((__ETIME - __LASTBACKUP)) < __BACKUPTIMER )); then
+			if (( $((__ETIME - __LASTBACKUP)) < 86400 )); then
 				__SKIPBACKUP=1
-				__MESSAGE='Server restart starts in'
+				__MESSAGE='[NOTIFICATION] Server restart starts in'
 			fi
 		fi
+	else
+		__MESSAGE='[NOTIFICATION] Server restart starts in'
 	fi
 
 	local __active_units=( $(getactive) )
 	local __failed=0
-	local __incrdir="${AVORION_BAKDIR}/incremental"
+	local __incrdir="/root/incremental"
 	local __backupdir="${AVORION_BAKDIR}/compressed"
-	local __logdir="${AVORION_BAKDIR}/logs"
-	local __backup_file="${__backupdir}/backup-${__ETIME}.tar.gz"
+	local __logdir="/root/logs"
+	local __backup_file="backup-${__ETIME}.tar.gz"
 	local __LOGFILE="$__logdir/backup-${__ETIME}.log"
 
-	echo "Grabbing active instances..."
-	for __dir in "$__logdir" "$__backupdir" "$__incrdir"; do
+	## Make sure our directories are present
+	for __dir in "$__logdir" "$__backupdir" "$__incrdir" "$__WORKING"; do
 		if [[ ! -d "$__dir" ]]; then
 			mkdir -p "$__dir" || {
 				echo "Cannot create $__dir"
@@ -69,7 +70,7 @@ function main() {
 
 	if (( __SKIPBACKUP < 1 )); then
 		echo "Performing backup rsync..."
-		printf "Syncing contents of $AVORION_SERVICEDIR to ${__incrdir}:\n"
+		printf "Syncing contents of $AVORION_SERVICEDIR to ${__incrdir}...\n"
 		if ! __perform_rsync "$AVORION_SERVICEDIR" "$__incrdir" >> "$__LOGFILE" 2>&1; then
 			echo "Failed to perform rsync!"
 			((__failed++))
@@ -85,10 +86,18 @@ function main() {
 				cp "${AVORION_SERVICEDIR}/${__inst}/server.ini" "${AVORION_SERVICEDIR}/${__inst}/server.ini.bak-$__ETIME"
 				mv "${AVORION_SERVICEDIR}/${__inst}/server.ini.replace"	"${AVORION_SERVICEDIR}/${__inst}/server.ini"
 			fi
-			echo "Restarting $__inst"
+			echo ">> Restarting $__inst"
 			$__AVORIONCMD start "$__inst" --cron
 		done
 	fi
+
+	## Just set everything to the correct user/dir
+	echo "Enforcing user ownership to be <${AVORION_USER}>:${AVORION_ADMIN_GRP}>"
+	chown -R "$AVORION_USER":"$AVORION_ADMIN_GRP" /srv/avorion
+	if [[ -e /srv/avorion/rconhostfile ]]; then
+		chown root:root /srv/avorion/rconhostfile
+	fi
+
 	rm /tmp/runningavorionbackup
 
 	if (( __SKIPBACKUP < 1 )); then
@@ -101,7 +110,7 @@ function main() {
 
 		if ! __perform_compression "$__backup_file" "$__incrdir" >> "$__LOGFILE" 2>&1; then
 			echo "Compression failed! File: $__backup_file"
-			echo "Failed to perform backup compression. Please check the log at <$__LOGFILE>!"
+			echo "Failed to complete compression routine. Please check the log at <$__LOGFILE>!"
 			exit 1
 		fi
 
@@ -111,7 +120,7 @@ function main() {
 		fi
 
 		## Only rotate if backups were successful
-		if ! __perform_backup_rotation "$__backupdir" "$__RETENTION"; then
+		if ! __perform_backup_rotation "$__backupdir" ; then
 			echo "Failed to rotate backups" | tee -a $__LOGFILE
 			exit 1 
 		fi
@@ -122,173 +131,59 @@ function main() {
 }
 
 function __perform_rsync () {
-	rsync -av --chown="$AVORION_USER":"$AVORION_ADMIN_GRP" "$1/" "$2/"
+	rsync -hvrPt --update "$1/" "$2/"
 	return $?
 }
 
 function __perform_compression () {
-	tar --owner "$AVORION_USER" --group "$AVORION_ADMIN_GRP" -zvcf "$1" -C "$2" .
-	return $?
-}
+	local __finalfile="${AVORION_BAKDIR}/compressed/${1}"
+	local __failed=0
+	
+	tar --owner "$AVORION_USER"\
+	   	--group "$AVORION_ADMIN_GRP"\
+	   	-zvcf "$__WORKING/$1" -C "$2" .
 
+	__failed="$(( __failed + $? ))"
+
+	if ! mv -v "${__WORKING}/${1}" "$__finalfile"; then
+		echo "Failed to move final backup tar to mounted backup!"
+		((__failed++))
+	fi
+
+	if [[ -e "${__WORKING}" ]]; then
+		if ! rm -rf "${__WORKING}"; then
+			echo "Unable to remove working dir!"
+			((__failed++))
+		fi
+	fi
+	return "$__failed"
+}
 
 function __perform_backup_rotation () {
 	## Get all of the backup files in the compressed dir
 	printf  "Detecting backup count...."
 	local -a __backup_files=( $(find "$1" -name 'backup-*.tar.gz') )
 	local __failed=0
-	echo "Found ${#__backup_files[@]}"
-	echo "Retention is $2"
+	echo "Found ${#__backup_files[@]} backups"
+	echo "Retention is $__RETENTION"
 
 	## Check if the number of files is greater than our retention. If it is, its
-	## time to try and rotate. Otherwise, we dont bother.
-	if (( ${#__backup_files[@]} > $2 )); then
+	## time to rotate
+	if (( ${#__backup_files[@]} > __RETENTION )); then
 		__backup_files=( $(find "$1" -name 'backup-*.tar.gz' -mtime "+$2") )
+
+		echo "The following backups are older than $__RETENTION days old and will be reomved:"
 		echo "$__backup_files"
+
 		for __file in "${__backup_files[@]}"; do
 			echo "Clearing $__file"
 			if ! rm -f "$__file" >> "$__LOGFILE"; then
 				((__failed++))
 			fi
 		done
-	else
-		echo "Skipping backup check, as number of backups present is lower than our retention of $2"
 	fi
 
 	return "$__failed"
-}
-
-# bool __validate_setting_conf <void>
-#	Validates the avorionsettings configuration, and makes sure that
-#	sourcing it will not break anything. If the file passes, return.
-#	Otherwise, kill the script.
-function __validate_setting_conf () {
-	[[ -f /etc/avorionsettings.conf ]] ||\
-		die "Avorion configuration file not found"
-
-	local -A __conf_vars
-	local __bad_symbols __err
-	__bad_symbols="[\\&^s\(\)%\[\]\#@!<>\'\",;:\{\}]"
-	__conf_vars[AVORION_ADMIN_GRP]='^[a-z][a-z]*$'
-	__conf_vars[AVORION_USER]='^[a-z][a-z]*$'
-	__conf_vars[AVORION_SERVICEDIR]='^/[a-zA-Z0-9_\-][a-zA-Z0-9_\-\/]*$'
-	__conf_vars[AVORION_BINDIR]='^[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
-	__conf_vars[AVORION_BAKDIR]='^\/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
-	__conf_vars[AVORION_STEAMID]='^[0-9][0-9]*$'
-	__conf_vars[STEAMCMD_BIN]='^(/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/\.]*[a-zA-Z0-9]|steamcmd)$'
-
-	# Leaving this here for now, but this used to check for invalid options
-	# being set in the configuration file
-	# grep -qcvE "^(($(printf '%s' "${!__conf_vars[*]}" | tr ' ' '|'))=.*|\\s*)" /etc/avorionsettings.conf >/dev/null \
-	#	|| return 1
-
-	local i=0
-	while read -r __l; do
-		# Set current line count
-		((i++))
-		
-		__err="Configuration error on line ${i} of /etc/avorionsettings.conf"
-		
-		# We dont care about blank lines and comments, so skip those
-		[[ "${__l}" =~ ^[[:space:]]*#*$ ]] && continue
-
-		# Ensure the line contains no invalid symbols
-		[[ "${__l}" =~ $__bad_symbols ]] &&\
-			die "${__err} -- Invalid chars present: <$( printf '%q' "${__l}") >"
-		
-		# Ensure that the variable declaration syntax is valid.
-		# We also use this to assign the captured strings to the
-		# BASH_REMATCH environment variable (bash does this automatically)
-		[[ "${__l}" =~ ^([^[:space:]][^[:space:]]*)=([^[:space:]][^[:space:]]*)$ ]] ||\
-			die "${__err} -- Bad syntax: <$( printf '%q' "${__l}")>"
-
-		# Ensure that the variable being declared is actually
-		# a setting that we will be making use of.
-		# 
-		# NOTE: About the wierd printf '%q' syntax, %q is an option that
-		# can be given to the printf Bash builtin that will automatically
-		# escape out any special characters. In this context, it is used
-		# to prevent special characters from potentially executing. This
-		# is also accomplished above, but I am paranoid
-		[[ -z "${__conf_vars[$( printf '%q' "${BASH_REMATCH[1]}" )]}" ]] &&\
-			die "${__err} -- Invalid setting: <$( printf '%q' "${BASH_REMATCH[1]}" )>"
-
-		# Make sure that the values given to the variable match a
-		# set syntax.
-		#
-		# TODO: Perform some deeper checks here. IE, we would
-		#       want to catch things like having the admin group
-		#       set to sudo.
-		[[ "$( printf '%q' "${BASH_REMATCH[2]}" )" =~ ${__conf_vars[$( printf '%q' "${BASH_REMATCH[1]}" )]} ]] ||\
-			die "${__err} -- Invalid assignment: <$( printf '%q' "${__l}")>"
-
-	done < /etc/avorionsettings.conf
-	
-	return 0
-}
-
-#@@@@@@@@@@@#
-# Utilities #
-#@@@@@@@@@@@#
-
-# int die <options> <string>
-#	Output the strings passed to stdout then exit
-#	with status code 1 (or the code given with -c)
-function die () {
-	local _code=1
-	if [[ "$1" == '-c' ]] && [[ "$2" =~ ^[0-9][0-9]*$ ]]; then
-		_code="$2"
-		shift; shift
-	fi
-
-	printf "Error: $1\n"
-	exit "$_code"
-}
-
-# bool yesno <string>
-#	Get a yes or no response from the user and
-#	return accordingly (0 for yes, 1 for no).
-#	If a string is passed, provide the user with
-#	that string as a prompt.
-function yesno () {
-	local _prompt _answer
-	_prompt="${1-Yes/No}"
-
-	while true; do
-		printf "[${_prompt}]> "
-		read -r _answer
-		case "${_answer}" in
-			[yY][eE][sS] | [yY] )
-				return 0
-				;;
-			[nN][oO] | [nN] )
-				return 1
-				;;
-			?)
-				printf "Please enter yes or no.\n"
-				;;
-		esac
-	done
-}
-
-# int plural <int>
-#	Given an int, print an s to the caller if said
-#	int does not equal 1
-function plural () {
-	if [[ "$1" =~ ^[0-9]+$ ]]; then
-		if (( $1 != 1 )); then
-			printf '%s' 's'
-			return 0
-		fi
-		return 0
-	fi
-
-	die "Function <plural> recieved <$1> rather than an int"
-}
-
-function getactive () {
-	local __unit_string='^[[:space:]]*avorion@[^[:space:]][^[:space:]]*.service[[:space:]][[:space:]]*loaded[[:space:]][[:space:]]*active[[:space:]][[:space:]]*running'
-	systemctl list-units 'avorion@*' | grep "$__unit_string" | awk '{print $1}' 2>/dev/null | sed 's,^avorion@,,; s,\.service$,,'
 }
 
 main "$@"
