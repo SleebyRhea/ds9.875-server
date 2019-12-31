@@ -178,18 +178,21 @@ do
                 if type(__valid_arguments[v]) == "nil" and not __in_cmd then
                     return 1, "", __err.no_arg
                 elseif type(__valid_arguments[v]) == "table" then
-                    __arg_map[v] = {}
                     __in_cmd=v
+                    __arg_map[__in_cmd] = {}
                 else 
-                    table.insert(__arg_map[v], v)
+                    table.insert(__arg_map[__in_cmd], v)
                 end
             until __getTblLen(__command_data) < 1
         end
 
         -- Used for future proofing in case the Avorion devs decide to change
         -- which Lua version they are usings. For now, they seem to use 5.1
-        -- (or more likely, a superset of Luajit). Pretty gross "ternary" I know.
-        local unpak = (unpack and unpack or table.unpack)
+        -- (or more likely, a superset of Luajit). Table.unpack is done first for
+        -- simplicity here, but the global unpack is what is expected as of this
+        -- comment.
+        local unpak = (type(table.unpack) == "function" and table.unpack or unpack)
+
         if type(unpak) == "nil" then
             return 1, "", "That command is not usable with this version of Avorion!"
         end
