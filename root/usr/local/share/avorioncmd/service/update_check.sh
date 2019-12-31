@@ -5,13 +5,15 @@ __NOTIF_PREFIX='[NOTIFICATION]'
 __UPDATE_LOG=''
 __ETIME="$(date +%s)"
 
+source /usr/local/share/avorioncmd/common/common.sh
+
 function main() {
     __validate_setting_conf &&\
         source /etc/avorionsettings.conf
     
     __UPDATE_LOG="${AVORION_SERVICEDIR}/autoupdate.log"
 
-    if ! printf "\n\nLog opened @$__ETIME\n" >> "$__updatelog"; then
+    if ! printf "\n\nLog opened @$__ETIME\n" >> "$__UPDATE_LOG"; then
         die "Unable to write to logfile"
     fi
 
@@ -22,6 +24,7 @@ function main() {
     fi
 
     __check_for_steam_update
+
     if __check_update_status; then 
         echo "Update failed!" >&2
     fi
@@ -52,10 +55,10 @@ function __check_for_steam_update () {
 	## Overwrite default environment to fix sudo+steamcmd stupidity
     __oldusr="$USER"; __oldgrp="$GROUP"; __oldhome="$HOME"
 	export USER="$AVORION_USER"; export GROUP="$AVORION_ADMIN_GRP"; export HOME="$AVORION_SERVICEDIR"
-    __appdata="$(sudo -n -u avorion -g dsnineadm $__steamcmd $__get_info_command 2>&1)"
+    __appdata="$(sudo -n -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" $__steamcmd $__get_info_command 2>&1)"
 
     if (( $? > 0 )); then
-        echo "SteamCMD failed to download update! Please review "
+        echo "SteamCMD failed to download update! Please review: <$__UPDATE_LOG>"
         echo "$__appdata" >> "$__UPDATE_LOG"
         return 1
     fi
@@ -134,54 +137,7 @@ function __check_update_status() {
 
 
 function __is_locked() {
-    if [[ -f /tmp/avorion/updatingavorion.lock ]]; then
-        return 0
-    fi
-
-    return 1
-}
-
-# bool __validate_setting_conf <void>
-#	Validates the avorionsettings configuration, and makes sure that
-#	sourcing it will not break anything. If the file passes, return.
-#	Otherwise, kill the script.
-function __validate_setting_conf () {
-	[[ -f /etc/avorionsettings.conf ]] ||\
-		die "Avorion configuration file not found"
-
-	local -A __conf_vars
-	local __bad_symbols __err
-	__bad_symbols="[\\&^s\(\)%\[\]\#@!<>\'\",;:\{\}]"
-	__conf_vars[AVORION_ADMIN_GRP]='^[a-z][a-z]*$'
-	__conf_vars[AVORION_USER]='^[a-z][a-z]*$'
-	__conf_vars[AVORION_SERVICEDIR]='^/[a-zA-Z0-9_\-][a-zA-Z0-9_\-\/]*$'
-	__conf_vars[AVORION_BINDIR]='^[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
-	__conf_vars[AVORION_BAKDIR]='^\/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/]*$'
-	__conf_vars[AVORION_STEAMID]='^[0-9][0-9]*$'
-	__conf_vars[STEAMCMD_BIN]='^(/[a-zA-Z0-9_\-\/][a-zA-Z0-9_\-\/\.]*[a-zA-Z0-9]|steamcmd)$'
-
-	local i=0
-	while read -r __l; do
-		((i++))
-		
-		__err="Configuration error on line ${i} of /etc/avorionsettings.conf"
-		
-		[[ "${__l}" =~ ^[[:space:]]*#*$ ]] &&\
-		   	continue
-		
-		[[ "${__l}" =~ $__bad_symbols ]] &&\
-			die "${__err} -- Invalid chars present: <$( printf '%q' "${__l}") >"
-		
-		[[ "${__l}" =~ ^([^[:space:]][^[:space:]]*)=([^[:space:]][^[:space:]]*)$ ]] ||\
-			die "${__err} -- Bad syntax: <$( printf '%q' "${__l}")>"
-		
-		[[ -z "${__conf_vars[$( printf '%q' "${BASH_REMATCH[1]}" )]}" ]] &&\
-			die "${__err} -- Invalid setting: <$( printf '%q' "${BASH_REMATCH[1]}" )>"
-		
-		[[ "$( printf '%q' "${BASH_REMATCH[2]}" )" =~ ${__conf_vars[$( printf '%q' "${BASH_REMATCH[1]}" )]} ]] ||\
-			die "${__err} -- Invalid assignment: <$( printf '%q' "${__l}")>"
-
-	done < /etc/avorionsettings.conf
-	
-	return 0
+    [[ -f /tmp/avorion/updatingavorion.lock ]] &&\
+        return 0 ||\
+    	return 1
 }
