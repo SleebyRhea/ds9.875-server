@@ -3,7 +3,6 @@
 __AVORION_CMD='/usr/local/bin/avorion-cmd'
 __NOTIF_PREFIX='[NOTIFICATION]'
 __UPDATE_LOG=''
-__ETIME="$(date +%s)"
 
 source /usr/local/share/avorioncmd/common/common.sh
 
@@ -13,7 +12,7 @@ function main() {
     
     __UPDATE_LOG="${AVORION_SERVICEDIR}/autoupdate.log"
 
-    if ! printf "\n\nLog opened @$__ETIME\n" >> "$__UPDATE_LOG"; then
+    if ! printf "\n\nLog opened @$EDATE\n" >> "$__UPDATE_LOG"; then
         die "Unable to write to logfile"
     fi
 

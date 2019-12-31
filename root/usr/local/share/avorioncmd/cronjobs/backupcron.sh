@@ -6,7 +6,6 @@ declare __AVORIONCMD="/usr/local/bin/avorion-cmd"
 declare __LASTBACKUP=''
 declare __LOGFILE=''
 declare __SKIPBACKUP=0
-declare __ETIME="$(date +%s)"
 declare __MESSAGE='[NOTIFICATION] Server backup starts in'
 declare __RETENTION=7
 declare __BACKUPTIMER=86400 #Seconds
@@ -18,7 +17,7 @@ function main() {
 		if [[ -f "$AVORION_BAKDIR/lastfullbackup" ]]; then
 			__LASTBACKUP="$(cat "$AVORION_BAKDIR/lastfullbackup" | tr -d '\n')"
 			printf 'Last Backup: %s\n' "$__LASTBACKUP"
-			if (( $((__ETIME - __LASTBACKUP)) < 86400 )); then
+			if (( $((EDATE - __LASTBACKUP)) < __BACKUPTIMER )); then
 				__SKIPBACKUP=1
 				__MESSAGE='[NOTIFICATION] Server restart starts in'
 			fi
@@ -32,8 +31,8 @@ function main() {
 	local __incrdir="/root/incremental"
 	local __backupdir="${AVORION_BAKDIR}/compressed"
 	local __logdir="/root/logs"
-	local __backup_file="backup-${__ETIME}.tar.gz"
-	local __LOGFILE="$__logdir/backup-${__ETIME}.log"
+	local __backup_file="backup-${EDATE}.tar.gz"
+	local __LOGFILE="$__logdir/backup-${EDATE}.log"
 
 	## Make sure our directories are present
 	for __dir in "$__logdir" "$__backupdir" "$__incrdir" "$__WORKING"; do
@@ -83,7 +82,7 @@ function main() {
 		for __inst in "${__active_units[@]}"; do
 			if [[ -f "${AVORION_SERVICEDIR}/${__inst}/server.ini.replace" ]]; then
 				echo "Replacing server.ini"
-				cp "${AVORION_SERVICEDIR}/${__inst}/server.ini" "${AVORION_SERVICEDIR}/${__inst}/server.ini.bak-$__ETIME"
+				cp "${AVORION_SERVICEDIR}/${__inst}/server.ini" "${AVORION_SERVICEDIR}/${__inst}/server.ini.bak-$EDATE"
 				mv "${AVORION_SERVICEDIR}/${__inst}/server.ini.replace"	"${AVORION_SERVICEDIR}/${__inst}/server.ini"
 			fi
 			echo ">> Restarting $__inst"
@@ -114,7 +113,7 @@ function main() {
 			exit 1
 		fi
 
-		if ! echo "$__ETIME" > "$AVORION_BAKDIR/lastfullbackup" 2>>"$__LOGFILE"; then
+		if ! echo "$EDATE" > "$AVORION_BAKDIR/lastfullbackup" 2>>"$__LOGFILE"; then
 			echo "Failed to set $AVORION_BAKDIR/lastfullbackup. Please check the log at <$__LOGFILE>"
 			exit 1
 		fi
