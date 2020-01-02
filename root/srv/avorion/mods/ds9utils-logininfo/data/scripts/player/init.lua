@@ -35,8 +35,9 @@ if onServer() then
 		local __d = {
 			mod = 'ds9utils-logininfo',
 			plr = player.name,
-			name_craft = (player.craft and player.craft.name or "None (Flying In Drone)"),
 			name_alliance = (player.alliance and player.alliance.name or "None"),
+			name_craft = (player.craft and player.craft.name or "None (Flying In Drone)"),
+			ship_volume = 1,
 			count_blocks = 1,
 			count_ships_player = (player.numShips and player.numShips or 0),
 			count_ships_alliance = (alliance and alliance.numShips or 0),
@@ -63,6 +64,7 @@ if onServer() then
 			end
 
 			__d["count_blocks"] = (__plan and __plan.numBlocks or "Error")
+			__d["ship_volume"] = (__plan and __plan.volume or "Error")
 		end
 
 		__d["sector_player_stations"], __d["sector_alliance_stations"] = __getOwnerCount({sector:getEntitiesByType(EntityType.Station)})
@@ -71,13 +73,12 @@ if onServer() then
 		-- While I would LOVE nothing more than to just the fancy table up above, the string
 		-- utility does NOT make use of a raw Lua table when passed it. Thus, the following
 		-- syntax MUST be used. I've tried to make this as painless to interpret as possible.
-		print("[${m}] ${p} ::> Current Ship Name=<${n1}>, Blocks=<${b}>, Loc=<${x}:${y}>"%_T % {m=__d.mod,p=__d.plr,n1=__d.name_craft,b=__d.count_blocks,x=__d.coordsx,y=__d.coordsy} )
-		print("[${m}] ${p} ::> Total Station Counts: player=<${n1}>, alliance=<${n2}>"%_T % {m=__d.mod,p=__d.plr,n1=__d.count_stations_player,n2=__d.count_stations_alliance} )
+		print("[${m}] ${p} ::> Current Ship Name=<${n1}>, Blocks=<${b}>, Vol=<${v}k m3>, Loc=<${x}:${y}>"%_T % {m=__d.mod,p=__d.plr,n1=__d.name_craft,b=__d.count_blocks,v=__d.ship_volume,x=__d.coordsx,y=__d.coordsy} )		print("[${m}] ${p} ::> Total Station Counts: player=<${n1}>, alliance=<${n2}>"%_T % {m=__d.mod,p=__d.plr,n1=__d.count_stations_player,n2=__d.count_stations_alliance} )
 		print("[${m}] ${p} ::> Total Ship Counts: player=<${n1}>, alliance=<${n2}>"%_T % {m=__d.mod,p=__d.plr,n1=__d.count_ships_player,n2=__d.count_ships_alliance} )
 		print("[${m}] ${p} ::> System: objects=<${n1}>, onlineplayers=<${n2}>"%_T % {m=__d.mod, p=__d.plr, s=__d.coords, n1=__d.sector_objects, n2=__d.sector_players} )
 		print("[${m}] ${p} ::> System: drones=<${n1}>, playerships=<${n2}>, allianceships=<${n3}>"%_T % {m=__d.mod, p=__d.plr, n1=__d.sector_drones, n2=__d.sector_player_ships, n3=__d.sector_alliance_ships} )
 		print("[${m}] ${p} ::> System: playerstations=<${n1}>, alliancestations=<${n2}>"%_T % {m=__d.mod, p=__d.plr, n1=__d.sector_player_stations, n2=__d.sector_alliance_stations} )
-
+		
 		package.path = old_path
 	end
 end
