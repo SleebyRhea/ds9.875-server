@@ -1,3 +1,5 @@
+include("ds9utils-lib")
+
 if onServer() then
 	local player = Player()
 	print("[ds9utils-allcolors] Adding all colors to " .. player.name)

@@ -23,6 +23,7 @@ do
     include("utility")
     include("stringutility")
     include("weapontype")
+    include("ds9utils-lib")
 
     local __d = {
         -- Mod Init

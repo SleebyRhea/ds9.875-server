@@ -17,6 +17,7 @@ do
     include("utility")
     include("stringutility")
     include("weapontype")
+    include("ds9utils-lib")
 
     local __file  = Server().folder .. "/RulesList.txt"
     local __name  = 'rules'

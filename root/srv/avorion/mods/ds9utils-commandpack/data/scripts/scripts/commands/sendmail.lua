@@ -2,7 +2,8 @@ do
     local __oldpath = package.path
     package.path = package.path .. ";data/scripts/lib/?.lua"
 
-    include ("stringutility")
+    include("stringutility")
+    include("ds9utils-lib")
 
     local __err = {
         no_arg = "Please provide an argument",
@@ -21,7 +22,7 @@ do
 
         __mail.sender = __m.m_sender
         __mail.header = __m.m_header
-        __mail.text = __m.m_text
+        __mail.text   = __m.m_text
 
         __mail.money = __m.r_credits
         __mail:setResources(

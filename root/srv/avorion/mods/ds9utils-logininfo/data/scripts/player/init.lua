@@ -1,5 +1,15 @@
 if onServer() then
 	do
+		-- **Dont** pollute the environment boys and girls
+		local player = Player()
+		local sector = Sector()
+		local old_path = package.path
+		local alliance = (player.allianceIndex and Alliance(player.allianceIndex) or nil)
+		package.path = package.path .. ";data/scripts/lib/?.lua"
+
+		include("ds9utils-lib")
+		include("stringutility")
+
 		-- Return table size
 		local function __getLength(t)
 			local __cnt = 0
@@ -21,13 +31,6 @@ if onServer() then
 			end
 			return __ip, __ia, __io
 		end
-
-		-- **Dont** pollute the environment boys and girls
-		local player = Player()
-		local sector = Sector()
-		local old_path = package.path
-		local alliance = (player.allianceIndex and Alliance(player.allianceIndex) or nil)
-		package.path = package.path .. ";data/scripts/lib/?.lua"
 
 		local __d = {
 			mod = 'ds9utils-logininfo',
@@ -68,7 +71,6 @@ if onServer() then
 		-- While I would LOVE nothing more than to just the fancy table up above, the string
 		-- utility does NOT make use of a raw Lua table when passed it. Thus, the following
 		-- syntax MUST be used. I've tried to make this as painless to interpret as possible.
-		include ("stringutility")
 		print("[${m}] ${p} ::> Current Ship Name=<${n1}>, Blocks=<${b}>, Loc=<${x}:${y}>"%_T % {m=__d.mod,p=__d.plr,n1=__d.name_craft,b=__d.count_blocks,x=__d.coordsx,y=__d.coordsy} )
 		print("[${m}] ${p} ::> Total Station Counts: player=<${n1}>, alliance=<${n2}>"%_T % {m=__d.mod,p=__d.plr,n1=__d.count_stations_player,n2=__d.count_stations_alliance} )
 		print("[${m}] ${p} ::> Total Ship Counts: player=<${n1}>, alliance=<${n2}>"%_T % {m=__d.mod,p=__d.plr,n1=__d.count_ships_player,n2=__d.count_ships_alliance} )
