@@ -11,19 +11,19 @@
 ]]
 
 do
-    local __old_path = package.path
-    package.path = package.path .. ";data/scripts/lib/?.lua"
-
-    include("utility")
-    include("stringutility")
-    include("weapontype")
-    include("ds9utils-lib")
-
     local __file  = Server().folder .. "/RulesList.txt"
     local __name  = 'rules'
     local __mod   = "ds9utils-commandpack"
     local __desc  = "Output the server rules"
     local __usage = ''
+    local __old_path = package.path
+    
+    package.path = package.path .. ";data/scripts/lib/?.lua"
+
+    include("utility")
+    include("stringutility")
+    include("weapontype")
+    include("ds9utils-lib")(__mod)
 
     local function __does_file_exist(name)
         local f=io.open(name,"r")
@@ -32,7 +32,7 @@ do
 
     function execute(sender, commandName, modName, ...)
         if type(sender) ~= "nil" then
-            print("[${mod}] Player <${p}> has read the server rules"%_T % {
+            print("Player <${p}> has read the server rules"%_T % {
                 mod=__mod,
                 p=Player(sender).name
             })
@@ -42,7 +42,7 @@ do
         local response = ""
 
         if not __does_file_exist(__file) then
-            print("[${mod}] No rules defined in <${f}>"%_T % {mod=__mod, f=__file})
+            print("No rules defined in <${f}>"%_T % {mod=__mod, f=__file})
             return 1, "", "No rules defined!"
         end
 
