@@ -32,7 +32,10 @@ do
 
     function execute(sender, commandName, modName, ...)
         if type(sender) ~= "nil" then
-            print("Player <${p}> has read the server rules"%_T % {p=Player(sender).name})
+            print("[${mod}] Player <${p}> has read the server rules"%_T % {
+                mod=__mod,
+                p=Player(sender).name
+            })
         end
 
         local args = {...}
