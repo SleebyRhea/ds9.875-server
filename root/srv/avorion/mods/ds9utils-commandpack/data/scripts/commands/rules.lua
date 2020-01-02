@@ -21,7 +21,7 @@ do
 
     local __file  = Server().folder .. "/RulesList.txt"
     local __name  = 'rules'
-    local __mod   = "ds9utils-welcomeemail"
+    local __mod   = "ds9utils-commandpack"
     local __desc  = "Output the server rules"
     local __usage = ''
 
@@ -31,7 +31,9 @@ do
     end
 
     function execute(sender, commandName, modName, ...)
-        print("\nNEW RULES OUTPUT\n")
+        if type(sender) ~= "nil" then
+            print("Player <${p}> has read the server rules"%_T % {p=Player(sender).name})
+        end
 
         local args = {...}
         local response = ""
