@@ -1,29 +1,31 @@
 --[[
 
     DS9 Utilities - Rules List
-    -----------------------------
+    --------------------------
     Whenever invoked by a player, will read from the rules file and
     output the text found therein. Each newline corresponds to a *new* rule, so
     lines can be as long as you like.
 
-    Licensed under the "BSD-3-Clause" license
+    License: WTFPL
+	Info: https://en.wikipedia.org/wiki/WTFPL
 
 ]]
 
 do
     local __file  = Server().folder .. "/RulesList.txt"
     local __name  = 'rules'
-    local __mod   = "ds9utils-commandpack"
     local __desc  = "Output the server rules"
     local __usage = ''
     local __old_path = package.path
-    
+
     package.path = package.path .. ";data/scripts/lib/?.lua"
 
     include("utility")
     include("stringutility")
     include("weapontype")
-    include("ds9utils-lib")(__mod)
+
+    -- Set modname for print function
+    include("ds9utils-lib")("ds9utils-commandpack")
 
     local function __does_file_exist(name)
         local f=io.open(name,"r")
@@ -33,7 +35,6 @@ do
     function execute(sender, commandName, modName, ...)
         if type(sender) ~= "nil" then
             print("Player <${p}> has read the server rules"%_T % {
-                mod=__mod,
                 p=Player(sender).name
             })
         end
@@ -42,7 +43,7 @@ do
         local response = ""
 
         if not __does_file_exist(__file) then
-            print("No rules defined in <${f}>"%_T % {mod=__mod, f=__file})
+            print("No rules defined in <${f}>"%_T % {f=__file})
             return 1, "", "No rules defined!"
         end
 

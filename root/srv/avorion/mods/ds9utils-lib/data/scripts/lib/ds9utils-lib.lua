@@ -1,4 +1,15 @@
--- Print override for timestamps
+--[[
+
+    DS9 Utilities - Mod Library
+    ---------------------------
+    Simple mod library that is required by mods
+    in the DS9 Utility suite.
+
+    License: WTFPL
+	Info: https://en.wikipedia.org/wiki/WTFPL
+
+]]
+
 do
     local __vanilla_print = _G.print
     local __d = {
@@ -6,6 +17,7 @@ do
         i_loadermod = false
     }
 
+    -- Print override that adds mod info and timestamps
     function _G.print(...)
         local __modinfo = ""
         local __timeinfo = "(" .. os.date("%Y-%m-%d %H:%M:%S") .. ") "
@@ -19,6 +31,9 @@ do
         return __vanilla_print(...)
     end
 
+    -- Return a callable table that, when provided a string, will set the name
+    -- of the mod that included this library. If no string is returned, then do
+    -- nothing but source the file.
     return setmetatable(
         {},
         {

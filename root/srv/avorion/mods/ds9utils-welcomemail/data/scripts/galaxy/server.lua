@@ -7,8 +7,9 @@
     root directory. Also optionally (and by default) adds one or more
     turrets of your spefication to the email as an attachment.
 
-    Licensed under the "BSD-3-Clause" license
-    
+    License: WTFPL
+	Info: https://en.wikipedia.org/wiki/WTFPL
+
 ]]
 
 do
@@ -23,12 +24,11 @@ do
     include("utility")
     include("stringutility")
     include("weapontype")
-    include("ds9utils-lib")
+    include("ds9utils-lib")("ds9utils-welcomeemail")
 
     local __d = {
         -- Mod Init
         turret     = nil,
-        i_modname  = "ds9utils-welcomeemail",
 
         -- Default Message Information
         m_sender   = "DS9 Admin Team",
@@ -81,12 +81,12 @@ do
         vanilla_initialize()
         __d.turret = __make_turret(__d)
         if type(__d.turret) == "nil" then 
-            print("[${mod}] Generated turret is nil! Skipping turret email addition."%_T % {mod=__d.i_modname} )
+            print("Generated turret is nil! Skipping turret email addition.")
         else
-            print("[${mod}] Generated turret is of type <${t_type}>."%_T % {mod=__d.i_modname,t_type=type(__d.turret)} )
+            print("Generated turret is of type <${t_type}>."%_T % {t_type=type(__d.turret)} )
         end
 
-        print("[${mod}] Mail text file location is: ${m_file}"%_T % {mod=__d.i_modname, m_file=__d.m_file})
+        print("Mail text file location is: ${m_file}"%_T % {m_file=__d.m_file})
     end
 
     function onPlayerCreated (index)
@@ -141,7 +141,7 @@ do
 
             __turret = true
         else
-            print("[${mod}] Skipped adding turret to player mail. Datatype is incorrect: <%{t_type}>"%_T % {mod=__d.i_modname, t_type=type(__d.turret)} )
+            print("Skipped adding turret to player mail. Datatype is incorrect: <%{t_type}>"%_T % {t_type=type(__d.turret)} )
         end
         
         if __mailfile then
@@ -153,7 +153,7 @@ do
         end
 
         __player:addMail(__mail)
-        print("[${mod}] Sent welcome email to <${pname}>. ${footer}"%_T % {mod=__d.i_modname,pname=__player.name,footer=__msgfooter} )
+        print("Sent welcome email to <${pname}>. ${footer}"%_T % {pname=__player.name,footer=__msgfooter} )
     end
 
     package.path = __old_path
