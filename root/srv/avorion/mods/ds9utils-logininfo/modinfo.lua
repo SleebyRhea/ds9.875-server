@@ -6,7 +6,7 @@ meta =
     description =      "Vomit player data to the primary logfile when they log in",
     authors =          {"ds9.875-team"},
     version =          "1.0",
-    dependencies =     {{id = "Avorion", min = "0.22"}},
+    dependencies =     {{id = "ds9875lib", min = "1.0"},{id = "Avorion", min = "0.22"}},
     serverSideOnly =   true,
     clientSideOnly =   false,
     saveGameAltering = true,
