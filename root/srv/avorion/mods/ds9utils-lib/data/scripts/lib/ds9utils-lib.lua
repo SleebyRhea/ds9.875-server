@@ -10,6 +10,12 @@
 
 ]]
 
+-- Used for future proofing in case the Avorion devs decide to change
+-- which Lua version they are using. For now, they seem to use 5.1
+-- (or more likely, a superset of Luajit). Table.unpack is done first for
+-- simplicity here, but the global unpack is what is expected as of this comment.
+_G.unpack = (type(table.unpack) == "function" and table.unpack or _G.unpack)
+
 do
     local __vanilla_print = _G.print
     local __d = {
