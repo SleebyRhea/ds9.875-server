@@ -7,7 +7,7 @@ fi
 
 ## Script Vars
 readonly CMDNAME="$(basename "$0")"
-readonly CMDVERS='2.0-testing rev16'
+readonly CMDVERS='2.0-testing rev17'
 readonly EDATE="$(date +%s)"
 
 ## Color Codes
@@ -35,7 +35,6 @@ readonly __b_white='\u001b[47m'   ## White
 readonly __unit_string='^[[:space:]]*avorion@[^[:space:]][^[:space:]]*.service[[:space:]][[:space:]]*loaded[[:space:]][[:space:]]*active[[:space:]][[:space:]]*running'
 
 ## Flags and Misc
-declare DOALL=0
 declare FORCE=0
 declare CRON=0
 declare VERBOSE=0
