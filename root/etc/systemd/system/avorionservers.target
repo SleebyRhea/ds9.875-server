@@ -1,6 +1,5 @@
 [Unit]
 Description=Avorion Server Targets
-After=backup.mount
 Wants=avorion@ds9server.service
 
 [Install]

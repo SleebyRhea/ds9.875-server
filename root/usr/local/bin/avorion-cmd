@@ -9,7 +9,7 @@ fi
 source /usr/local/share/avorioncmd/common/common.sh
 
 ## Tmux Vars
-declare _tmuxsess _tmuxsock __allowed
+declare  _tmuxsess _tmuxsock __allowed
 readonly _tmuxconf=/etc/avorioncmd-tmux.conf
 readonly _tmuxcmd="$(command -v tmux 2>/dev/null)"
 
@@ -504,7 +504,7 @@ function __perform_update () {
 	# Download the latest version to: "${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	# ex: /srv/avorion/server_dir.updatefiles
 	#
-	# NOTE: Depending on the distrobution, steamcmd may require manual intervention in order to
+	# NOTE: Depending on the distribution, steamcmd may require manual intervention in order to
 	#       run this properly. This is a known issue with Debian based deb installations specifically.
 	#       To work around this, install steamcmd manually to /opt/steam per the settings file included.
 	#

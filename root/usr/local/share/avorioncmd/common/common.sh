@@ -122,10 +122,11 @@ function plural () {
 #	are both valid configs, and that the settings
 #	provided are valid.
 function __validate_setting_conf () {
-	[[ -f /etc/avorionsettings.conf ]] ||\
+	if ! [[ -f /etc/avorionsettings.conf ]]; then
 		die "Avorion configuration file not found"
+	fi
 
-	local -A __conf_vars
+	local -A __conf_vars __index
 	local __bad_symbols __err
 	__bad_symbols="[\\&^s\(\)%\[\]\#@!<>\'\",;:\{\}]"
 	__conf_vars[AVORION_ADMIN_GRP]='^[a-z][a-z]*$'
@@ -164,8 +165,10 @@ function __validate_setting_conf () {
 		# escape out any special characters. In this context, it is used
 		# to prevent special characters from potentially executing. This
 		# is also accomplished above, but I am paranoid
-		[[ -z "${__conf_vars[$( printf '%q' "${BASH_REMATCH[1]}" )]}" ]] &&\
-			die "${__err} -- Invalid setting: <$( printf '%q' "${BASH_REMATCH[1]}" )>"
+		__index="$(printf '%q' "${BASH_REMATCH[1]}")"
+		if [[ -z "${__conf_vars[$__index]}" ]]; then
+			die "${__err} -- Invalid setting: <$__index>"
+		fi
 
 		# Make sure that the values given to the variable match a
 		# set syntax.
@@ -173,9 +176,9 @@ function __validate_setting_conf () {
 		# TODO: Perform some deeper checks here. IE, we would
 		#       want to catch things like having the admin group
 		#       set to sudo.
-		[[ "$( printf '%q' "${BASH_REMATCH[2]}" )" =~ ${__conf_vars[$( printf '%q' "${BASH_REMATCH[1]}" )]} ]] ||\
+		if ! [[ "$( printf '%q' "${BASH_REMATCH[2]}" )" =~ ${__conf_vars[$__index]} ]]; then
 			die "${__err} -- Invalid assignment: <$( printf '%q' "${__l}")>"
-
+		fi
 	done < /etc/avorionsettings.conf
 
 	source /etc/avorionsettings.conf
@@ -202,14 +205,17 @@ function __check_requirements () {
 		_arg="${_requires["$_prog"]%%=*}"
 		_string="${_requires["$_prog"]##*=}"
 
-		command -v "$_prog" >/dev/null 2>&1 ||\
+		if ! command -v "$_prog" >/dev/null 2>&1; then
 			die "${_prog} is required but is either not installed, or not in the execution PATH"
+		fi
 
-		[[ "${_requires[$_prog]}" == 'skip' ]] &&\
+		if [[ "${_requires[$_prog]}" == 'skip' ]]; then
 			continue
+		fi
 
-		[[ "$("$_prog" "$_arg")" =~ $_string ]] ||\
+		if ! [[ "$("$_prog" "$_arg")" =~ $_string ]]; then
 			die "${_prog} doesnt meet the minimum version requirements"
+		fi
 	done
 }
 
@@ -253,4 +259,3 @@ elif [[ ! -w "$TMP_FILE" ]]; then
 	echo "Cannot write to tmpfile <$TMP_FILE>. Check tmp permissions."
 	exit 1
 fi
-

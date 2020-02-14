@@ -33,14 +33,14 @@ mv -t backup/ \
 	/etc/systemd/system/avorion@.service \
 	/etc/systemd/system/steamcmd.service \
 	/usr/local/bin/avorion-cmd \
-	/usr/local/share/avorioncmd/cronjobs
+	/usr/local/share/avorioncmd
 
 if ! ( cd ./root >/dev/null 2>&1 ); then
 	echo "Unable to switch to root. Please make sure to run this from the project root"
 	exit 1
 fi
 
-source /etc/avorionsettings.conf
+source etc/avorionsettings.conf
 
 if [ -z "$AVORION_SERVICEDIR" ] || [ -z "$AVORION_ADMIN_GRP" ] || [ -z "$AVORION_USER" ]; then
 	echo "Avorion instance definitions missing"
@@ -48,7 +48,7 @@ if [ -z "$AVORION_SERVICEDIR" ] || [ -z "$AVORION_ADMIN_GRP" ] || [ -z "$AVORION
 fi
 
 echo "Ensuring $AVORION_USER user and $AVORION_ADMIN_GRP exist"
-useradd "$AVORION_USER" -d /srv/"$AVORION_USER" -c "Avorion Service User" -r -s /sbin/nologin
+useradd "$AVORION_USER" -d "$AVORION_SERVICEDIR" -c "Avorion Service User" -r -s /sbin/nologin
 groupadd "$AVORION_ADMIN_GRP"
 
 if ! mkdir -p /usr/local/share/avorioncmd/cronjobs; then
@@ -75,9 +75,11 @@ echo "Setting permissions for <${AVORION_SERVICEDIR}>:"
 
 chown -R "$AVORION_USER":"$AVORION_ADMIN_GRP" "$AVORION_SERVICEDIR"
 __filesys="$(df "$AVORION_SERVICEDIR" 2>&1 | tail -n 1 | awk '{printf "%s",$1}')"
-if { echo "$__filesys" | grep -q 'type xfs' >/dev/null 2>&1; } || { echo "$__filesys" | grep -q acl >/dev/null 2>&1; }; then
+if { echo "$__filesys" | grep -q -e 'type xfs' -e 'acl' >/dev/null 2>&1; }; then
 	setfacl -b "$AVORION_SERVICEDIR"
 	chmod g+s "$AVORION_SERVICEDIR"
+	setfacl -m -R u:"$AVORION_USER":rwX "$AVORION_SERVICEDIR"
+	setfacl -m -R g:"$AVORION_ADMIN_GRP":rwX "$AVORION_SERVICEDIR"
 	setfacl -d -m u:"$AVORION_USER":rwX "$AVORION_SERVICEDIR"
 	setfacl -d -m g:"$AVORION_ADMIN_GRP":rwX "$AVORION_SERVICEDIR"
 fi

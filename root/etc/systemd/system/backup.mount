@@ -1,6 +1,6 @@
 [Unit]
 Description=Remote NFS Share
-After=network.target
+After=avorionservers.target
 
 [Mount]
 What=sibyl.xtnet.link:/nfs/backups/sleepybackup
