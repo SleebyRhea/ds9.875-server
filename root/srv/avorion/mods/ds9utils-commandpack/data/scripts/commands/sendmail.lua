@@ -1,9 +1,10 @@
 do
     local __oldpath = package.path
+    local err = nil
     package.path = package.path .. ";data/scripts/lib/?.lua"
 
     include("stringutility")
-    include("ds9utils-lib")("ds9utils-sendmail")
+    include("ds9utils-lib")("ds9utils-commandpack")
 
     local __err = {
         no_arg = "Please provide an argument",
@@ -36,7 +37,7 @@ do
         )
 
         for __id, v in ipairs(__m.m_rcpt) do
-            Player(__id):addMail(__mail)
+            findPlayerByName(__id):addMail(__mail)
         end
 
         return 0, "Sent ${n} players email."%_T % {n=#__m.m_rcpt}, ""
@@ -147,7 +148,7 @@ do
 
 		for k,v in pairs(__valid_arguments) do
 			print("Processing: "..k)
-			__usage = __usage .. k ..
+d			__usage = __usage .. k ..
 				": <" .. (v.usage and v.usage or "none") .. ">\n\t" ..
 				v.description .. "\n"
 		end
@@ -165,7 +166,7 @@ do
 
         -- If an error is received, cancel the command and return it
         local __valid_arguments, err = __getAvailableArguments(sender)
-        if err then
+        if not __valid_arguments and err then
             return 1, "", err
         end
 
