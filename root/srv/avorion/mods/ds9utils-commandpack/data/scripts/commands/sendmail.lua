@@ -3,7 +3,7 @@ do
     package.path = package.path .. ";data/scripts/lib/?.lua"
 
     include("stringutility")
-    include("ds9utils-lib")
+    include("ds9utils-lib")("ds9utils-sendmail")
 
     local __err = {
         no_arg = "Please provide an argument",
@@ -60,7 +60,7 @@ do
 
     local __addPlayerData = {
         description = "Adds a player to the recipients list",
-        usage = "<playername>",
+        usage = "playername",
         func = function (__data, ...)
             for _, __id  in ipairs({...}) do
                 table.insert(__data.m_rcpt, __id)
@@ -101,16 +101,19 @@ do
     }
 
     local __setFileData = {
+		description = "Specify the file (stored in "..
+			__modinfo.i_message_dir..
+			") to use for the email",
+		usage = "filename",
         func = function (fileName)
         end,
-        usage = "<filename> -- Specify the file (stored in ${dir}) to use for the email"%_T % {
-            dir=__modinfo.i_message_dir}
     }
 
     local __setTextData = {
+        description = "Specify the message to be sent",
+		usage = "message",
         func = function (text)
         end,
-        usage = "<message> -- Specify the message to be sent"
     }
 
     -- Returns a table with the available commands and their mapped
@@ -121,21 +124,41 @@ do
     -- usage and description text without needing to write duplicate code
     local function __getAvailableArguments(sender)
         local __data = {}
-
-        if Server():hasAdminPrivileges(Player(sender)) then
-            __data["-p"] = __addPlayerData
-            __data["-f"] = __setFileData
-            __data["-m"] = __setTextData
-            __data["-h"] = __setHeaderData
-            __data["-b"] = __addAllPlayersData
-            __data["-r"] = __addResourceData
-            return __data
-        end
-
-        return false, "Unauthorized to run this command"
+		__data["-p"] = __addPlayerData
+		__data["-f"] = __setFileData
+		__data["-m"] = __setTextData
+		__data["-h"] = __setHeaderData
+		__data["-b"] = __addAllPlayersData
+		__data["-r"] = __addResourceData
+		return __data, nil
     end
 
-    function execute(sender, commandName, modName, ...)
+    function getDescription(sender)
+        return __modinfo.i_description
+    end
+
+    function getHelp(sender)
+		local __usage = ""
+        local __valid_arguments, err = __getAvailableArguments(sender)
+        if err then
+			print(err)
+            return 1, "", err
+        end
+
+		for k,v in pairs(__valid_arguments) do
+			print("Processing: "..k)
+			__usage = __usage .. k ..
+				": <" .. (v.usage and v.usage or "none") .. ">\n\t" ..
+				v.description .. "\n"
+		end
+
+		return "Usage: ${c} <option> <parameter>\nOptions:\n${u}"%_T % {
+            c=__modinfo.i_commandname,
+            u=__usage
+        }
+    end
+
+    function execute(sender, commandName, ...)
         if not ... then
             return 1, "", __err.no_arg
         end
@@ -164,7 +187,7 @@ do
             r_xanion    = 0,
             r_ogonite   = 0,
             r_avorion   = 0,
-            
+
             -- Execution Flags
             f_do_resources_send = false,
         }
@@ -175,31 +198,28 @@ do
 
             repeat
                 local v = table.remove(__command_data)
-                
+
                 if type(__valid_arguments[v]) == "nil" and not __in_cmd then
                     return 1, "", __err.no_arg
                 elseif type(__valid_arguments[v]) == "table" then
                     __in_cmd=v
                     __arg_map[__in_cmd] = {}
-                else 
+                else
                     table.insert(__arg_map[__in_cmd], v)
                 end
             until __getTblLen(__command_data) < 1
         end
 
-        -- Used for future proofing in case the Avorion devs decide to change
-        -- which Lua version they are usings. For now, they seem to use 5.1
-        -- (or more likely, a superset of Luajit). Table.unpack is done first for
-        -- simplicity here, but the global unpack is what is expected as of this
-        -- comment.
-        local unpak = (type(table.unpack) == "function" and table.unpack or unpack)
-
-        if type(unpak) == "nil" then
+        if type(unpack) == "nil" then
             return 1, "", "That command is not usable with this version of Avorion!"
         end
 
         for k, v in pairs(__arg_map) do
-            __valid_arguments[k].func(unpak(v))
+			print("Running: " .. k)
+            _, err = __valid_arguments[k].func(unpack(v))
+			if err then
+				return 1, "", err
+			end
         end
 
         if __getTblLen(__msg.m_rcpt) < 1 then
@@ -207,23 +227,6 @@ do
         end
 
         return __sendEmail(__msg)
-    end
-
-    function getDescription(sender)
-        return __modinfo.i_description .. "." 
-    end
-
-    function getHelp(sender)
-        local __valid_arguments, err = __getAvailableArguments(sender)
-        if err then
-            return 1, "", err
-        end
-
-        return "${d}. Usage: ${c} ${u}"%_T % {
-            d=__modinfo.i_description,
-            c=__modinfo.i_commandname,
-            u=__modinfo.i_usage
-        }
     end
 
     package.path = __oldpath
