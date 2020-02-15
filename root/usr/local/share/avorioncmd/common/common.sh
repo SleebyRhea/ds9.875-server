@@ -7,7 +7,7 @@ fi
 
 ## Script Vars
 readonly CMDNAME="$(basename "$0")"
-readonly CMDVERS='2.0-testing rev17'
+readonly CMDVERS='2.0-testing rev18'
 readonly EDATE="$(date +%s)"
 
 ## Color Codes
