@@ -1,24 +1,28 @@
 #! /usr/bin/env bash
+#
+#
+#
+#
+
+# shellcheck disable=SC1091
+source /usr/local/share/avorioncmd/common/common.sh
 
 __AVORION_CMD='/usr/local/bin/avorion-cmd'
 __NOTIF_PREFIX='[NOTIFICATION]'
-__UPDATE_LOG=''
+__UPDATE_LOG="${AVORION_SERVICEDIR}/autoupdate.log"
 
-source /usr/local/share/avorioncmd/common/common.sh
+function main() {    
+	if checkLock update; then
+		exit 0
+	fi
 
-function main() {
-    __validate_setting_conf &&\
-        source /etc/avorionsettings.conf
-    
-    __UPDATE_LOG="${AVORION_SERVICEDIR}/autoupdate.log"
-
-    if ! printf "\n\nLog opened @$EDATE\n" >> "$__UPDATE_LOG"; then
+    if ! printf '\n\nLog opened @%s\n' "$EDATE" >> "$__UPDATE_LOG"; then
         die "Unable to write to logfile"
     fi
 
     if ! __check_update_status; then
         case "$?" in
-            200 | 203 ) exit "0" ;;
+            200 | 203 ) exit 0 ;;
         esac
     fi
 
@@ -30,38 +34,47 @@ function main() {
     exit "$?"
 }
 
+function __send_update_notification () {
+	local __new_version
+	__new_version="$( "${AVORION_SERVICEDIR}/${AVORION_BINDIR}".updatefiles/bin/AvorionServer --version)"
+	$__AVORION_CMD exec +all "/say ${__NOTIF_PREFIX} New update downloaded! New version: ${__new_version}"
+}
+
+#
+#
+#
+#
+#
 function __enqueue_restart() {
     return 0
 }
 
 function __check_for_steam_update () {
-    local __appdata __oldusr __oldgrp __oldhome __steamcmd
+    local __appdata __oldusr __oldgrp __oldhome
+	local -a __get_info_command
 
-    # Quick check to make sure that SteamCMD is present either
-    # in steamcmd or steamcmd.sh form
-    if [[ -f "$STEAMCMD_BIN" ]] || command -v "$STEAMCMD_BIN" >/dev/null 2>&1; then
-        __steamcmd="$STEAMCMD_BIN"
-    else 
-        __steamcmd="$(command -v steamcmd 2>/dev/null | head -n1 2>/dev/null)"
-        if [[ -z "$_steamcmd" ]]; then
-            die "SteamCMD definition is undefined, or invalid"
-        fi
-    fi
+    ## Command array used to update and output the steam app data cache
+    __get_info_command=(
+		'+@ShutdownOnFailedCommand' 1 
+		'+@NoPromptForPassword' 1
+		'+login' anonymous 
+		'+force_install_dir' "${AVORION_SERVICEDIR}/${AVORION_BINDIR}"
+		'+app_info_update' 1
+		'+app_status' "${AVORION_STEAMID}"
+		'+quit'
+	)
 
-    ## Command string used to update and output the steam app data cache
-    __get_info_command="+@ShutdownOnFailedCommand 1 +@NoPromptForPassword 1 +login anonymous +force_install_dir '${AVORION_SERVICEDIR}/${AVORION_BINDIR}' +app_info_update 1 +app_status '$AVORION_STEAMID' +quit"
-
-	## Overwrite default environment to fix sudo+steamcmd stupidity
+	## Overwrite default environment to fix steamcmd using bash environment data
     __oldusr="$USER"; __oldgrp="$GROUP"; __oldhome="$HOME"
 	export USER="$AVORION_USER"; export GROUP="$AVORION_ADMIN_GRP"; export HOME="$AVORION_SERVICEDIR"
-    __appdata="$(sudo -n -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" $__steamcmd $__get_info_command 2>&1)"
 
-    if (( $? > 0 )); then
+    if __appdata="$($SUDOPREFIX "$STEAMCMD_BIN" "${__get_info_command[@]}" 2>&1)"; then
         echo "SteamCMD failed to download update! Please review: <$__UPDATE_LOG>"
         echo "$__appdata" >> "$__UPDATE_LOG"
         return 1
     fi
 
+	## Revert
     export USER="$__oldusr"; export GROUP="$__oldgrp"; export HOME="$__oldhome"
 
     if [[ -z "$__appdata" ]]; then
@@ -96,7 +109,7 @@ function __check_update_status() {
 
     __status="$(< "${AVORION_SERVICEDIR}/${AVORION_BINDIR}".updatefiles/avorion.updatestatus tr -d '\n')"
     if ! [[ "$__status" =~ ^[[^:]][[^:]]*:[[^:]][[^:]]*:[[^:]][[^:]]*$ ]]; then
-        echo "Invalid update status: <${__status}>" >2
+        echo "Invalid update status: <${__status}>" >&2
         return 0
     fi
 
@@ -107,7 +120,7 @@ function __check_update_status() {
     case "${__job_status}:${__job_inform}" in
         complete:success)
             echo "Update has been downloaded and is ready for installation."
-            __send_notification "New update downloaded!"
+        	__send_update_notification
             __enqueue_restart 3600 "Restarting server for updates"
             return 200
             ;;
