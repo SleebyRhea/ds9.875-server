@@ -104,9 +104,9 @@ function __start_avorion_instance () {
 			fi
 		
 			if (( _noout < 1 )); then
-				printf "${__f_red}%s${__t_clear}\n" 'Fail'
-				printf "\t\tEither the service is broken, or the galaxy you are starting is not configured\n"
-				printf "\t\tIf this is intentional, and you have permissions, use sudo."
+				printf "${__f_red}%tils${__t_clear}\n" 'Fail'
+				printf "\tEither the service is broken, or the galaxy you are starting is not configured\n"
+				printf "\tIf this is intentional, and you have permissions, use sudo.\n"
 			else
 				printf 'Failed to start avorion@%s.service\n' "${_sess}"
 			fi
@@ -434,6 +434,7 @@ function __perform_update () {
 
 	_updatedir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	_currentdir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}"
+	__sudo_prefix="sudo -u ${AVORION_USER} -g ${AVORION_ADMIN_GRP} -n"
 	_failed=0
 	__auto_update=0
 
@@ -452,7 +453,7 @@ function __perform_update () {
 	fi
 
 	if [[ ! -d /tmp/avorion ]]; then
-		sudo -n -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" mkdir /tmp/avorion ||\
+		$__sudo_prefix mkdir /tmp/avorion ||\
 			die "Unable to create tmp directory"
 	fi
 
@@ -462,11 +463,12 @@ function __perform_update () {
 	fi
 
 	if [[ ! -d "$_updatedir" ]]; then
+		dbgsay "Making ${_updatedir}"
 		if [[ -e "$_updatedir" ]]; then
 			rm "$_updatedir" || die "Cannot remove bad update directory! <$_updatedir>"
 		fi
 
-		if ! mkdir "$_updatedir"; then
+		if ! $__sudo_prefix mkdir "$_updatedir"; then
 			die "Cannot create update directory!"
 		fi
 	fi
@@ -478,11 +480,11 @@ function __perform_update () {
 	## Create a file called avorion.updatestatus that will house the current
 	## state of the Avorion update run. 
 	if (( __auto_update > 0 )); then
-		sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'updating:auto:' > '$_updatedir/avorion.updatestatus'"
+		$__sudo_prefix sh -c "echo 'updating:auto:' > '$_updatedir/avorion.updatestatus'"
 		__do_auto="--auto"
 	fi
 
-	sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" -n touch /tmp/avorion/updatingavorion.lock ||\
+	$__sudo_prefix touch /tmp/avorion/updatingavorion.lock ||\
 		die "Unable to create avorion lockfile! Check /tmp usage." &&\
 		printf "${__f_white}Updates locked.${__t_clear}\n"
 
@@ -494,7 +496,7 @@ function __perform_update () {
 		trap - EXIT TERM INT
 		[[ -f $AVORION_SERVICEDIR/$AVORION_BINDIR/avorion.updatestatus ]] &&\
 			rm "$AVORION_SERVICEDIR/$AVORION_BINDIR/avorion.updatestatus"
-		sudo -n -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" rm /tmp/avorion/updatingavorion.lock &&\
+		$__sudo_prefix rm /tmp/avorion/updatingavorion.lock &&\
 			printf "${__f_white}Updates unlocked${__t_clear}\n" ||\
 			printf "${__f_red}Failed to unlock updates${__t_clear}\n"
 		exit $?' TERM EXIT INT
@@ -537,7 +539,8 @@ function __perform_update () {
 	#        this to work correctly.
 	printf "\n${__f_white}Running SteamCMD binary <%s>.${__t_clear}\n" "$_steamcmd"
 
-	__steamcmd_command_string="sudo -u $AVORION_USER -g $AVORION_ADMIN_GRP -n $_steamcmd +login anonymous +force_install_dir $_updatedir +app_update $AVORION_STEAMID validate +exit"
+	__steamcmd_command_string="$__sudo_prefix $_steamcmd +login anonymous +force_install_dir $_updatedir +app_update $AVORION_STEAMID validate +exit"
+	dbgsay "Using ${__steamcmd_command_string}"
 	printf "${__f_lgray}"
 	if ! $__steamcmd_command_string; then
 		_failed=1
@@ -574,7 +577,7 @@ function __perform_update () {
 			## will later use to determine whether or not updates are complete and
 			## ready to go.
 			if (( __auto_update > 0 )); then
-				sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'complete:wontstart:brokenmods' > '$_updatedir/avorion.updatestatus'"
+				$__sudo_prefix sh -c "echo 'complete:wontstart:brokenmods' > '$_updatedir/avorion.updatestatus'"
 				die "Update downloaded, but detected broken mod versions."
 			fi
 		fi
@@ -629,11 +632,11 @@ function __perform_update () {
 	else
 		if (( _failed < 1 )); then
 			printf "${__f_white}\nAuto update complete, and ready for installation.\n"
-			sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'complete:success:' > '$_updatedir/avorion.updatestatus'"
+			$__sudo_prefix sh -c "echo 'complete:success:' > '$_updatedir/avorion.updatestatus'"
 		else
 			printf "\nAuto update failed! (Unknown reason)\n"
 			if [[ -f "$_updatedir" ]]; then
-				sudo -u "$AVORION_USER" -g "$AVORION_ADMIN_GRP" sh -c "echo 'complete:failed:unknown' > '$_updatedir/avorion.updatestatus'"
+				$__sudo_prefix sh -c "echo 'complete:failed:unknown' > '$_updatedir/avorion.updatestatus'"
 			fi
 			printf "\n"
 			exit 1
