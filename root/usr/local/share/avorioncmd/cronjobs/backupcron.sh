@@ -15,7 +15,7 @@ function main() {
 	## backups have been disabled
 	if (( __SKIPBACKUP < 1 )); then
 		if [[ -f "$AVORION_BAKDIR/lastfullbackup" ]]; then
-			__LASTBACKUP="$(cat "$AVORION_BAKDIR/lastfullbackup" | tr -d '\n')"
+			__LASTBACKUP="$(<"$AVORION_BAKDIR/lastfullbackup" tr -d '\n')"
 			printf 'Last Backup: %s\n' "$__LASTBACKUP"
 			if (( $((EDATE - __LASTBACKUP)) < __BACKUPTIMER )); then
 				__SKIPBACKUP=1
@@ -26,13 +26,14 @@ function main() {
 		__MESSAGE='[NOTIFICATION] Server restart starts in'
 	fi
 
-	local __active_units=( $(getactive) )
 	local __failed=0
 	local __incrdir="/root/incremental"
 	local __backupdir="${AVORION_BAKDIR}/compressed"
 	local __logdir="/root/logs"
 	local __backup_file="backup-${EDATE}.tar.gz"
 	local __LOGFILE="$__logdir/backup-${EDATE}.log"
+	local -a __active_units
+	mapfile -t __active_units <(getactive)
 
 	## Make sure our directories are present
 	for __dir in "$__logdir" "$__backupdir" "$__incrdir" "$__WORKING"; do
@@ -69,7 +70,7 @@ function main() {
 
 	if (( __SKIPBACKUP < 1 )); then
 		echo "Performing backup rsync..."
-		printf "Syncing contents of $AVORION_SERVICEDIR to ${__incrdir}...\n"
+		printf "Syncing contents of %s to ${__incrdir}...\n" "$AVORION_SERVICEDIR"
 		if ! __perform_rsync "$AVORION_SERVICEDIR" "$__incrdir" >> "$__LOGFILE" 2>&1; then
 			echo "Failed to perform rsync!"
 			((__failed++))
@@ -101,7 +102,7 @@ function main() {
 
 	if (( __SKIPBACKUP < 1 )); then
 		echo "Compressing backups...."
-		printf "Compressing contents of $__incrdir to $__backup_file\n"
+		printf "Compressing contents of %s to %s\n" "$__incrdir" "$__backup_file"
 		if (( __failed > 0 )); then
 			echo "Failed to perform backup rsync. Please check the log at <$__LOGFILE>!"
 			exit 1
@@ -159,20 +160,21 @@ function __perform_compression () {
 }
 
 function __perform_backup_rotation () {
+	local -a __backup_files
+	local __failed=0
+	
 	## Get all of the backup files in the compressed dir
 	printf  "Detecting backup count...."
-	local -a __backup_files=( $(find "$1" -name 'backup-*.tar.gz') )
-	local __failed=0
+	mapfile -t __backup_files <(find "$1" -name 'backup-*.tar.gz')
 	echo "Found ${#__backup_files[@]} backups"
 	echo "Retention is $__RETENTION"
 
 	## Check if the number of files is greater than our retention. If it is, its
 	## time to rotate
 	if (( ${#__backup_files[@]} > __RETENTION )); then
-		__backup_files=( $(find "$1" -name 'backup-*.tar.gz' -mtime "+$2") )
-
+		mapfile -t __backup_files <( find "$1" -name 'backup-*.tar.gz' -mtime "+$2")
 		echo "The following backups are older than $__RETENTION days old and will be reomved:"
-		echo "$__backup_files"
+		echo "${__backup_files[@]}"
 
 		for __file in "${__backup_files[@]}"; do
 			echo "Clearing $__file"
