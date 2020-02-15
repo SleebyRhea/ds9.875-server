@@ -40,7 +40,7 @@ if ! ( cd ./root >/dev/null 2>&1 ); then
 	exit 1
 fi
 
-source etc/avorionsettings.conf
+source ./root/etc/avorionsettings.conf
 
 if [ -z "$AVORION_SERVICEDIR" ] || [ -z "$AVORION_ADMIN_GRP" ] || [ -z "$AVORION_USER" ]; then
 	echo "Avorion instance definitions missing"
@@ -51,8 +51,8 @@ echo "Ensuring $AVORION_USER user and $AVORION_ADMIN_GRP exist"
 useradd "$AVORION_USER" -d "$AVORION_SERVICEDIR" -c "Avorion Service User" -r -s /sbin/nologin
 groupadd "$AVORION_ADMIN_GRP"
 
-if ! mkdir -p /usr/local/share/avorioncmd/cronjobs; then
-	echo "Failed to create cronjobs directory!"
+if ! mkdir -p /usr/local/share/avorioncmd/{cronjobs,common}; then
+	echo "Failed to create shared directories!"
 	exit 1
 fi
 
@@ -61,17 +61,18 @@ if ! mkdir -p "$AVORION_SERVICEDIR"/{mods,sockets}; then
 	exit 1
 fi
 
+install -m 644 ./root/usr/local/share/avorioncmd/common/common.sh /usr/local/share/avorioncmd/common/common.sh
 install -m 644 ./root/etc/avorioncmd-tmux.conf /etc/avorioncmd-tmux.conf
-install -m 644 ./root/etc/avorionsettings.conf /etc/avorionsettings.conf
+#install -m 644 ./root/etc/avorionsettings.conf /etc/avorionsettings.conf
 install -m 644 ./root/etc/systemd/system/avorionservers.target /etc/systemd/system/avorionservers.target
 install -m 644 ./root/etc/systemd/system/avorion@.service /etc/systemd/system/avorion@.service
 install -m 0440 ./root/etc/sudoers.d/avorion-ds9 /etc/sudoers.d/avorion-ds9
 install -m 755 ./root/usr/local/bin/avorion-cmd /usr/local/bin/avorion-cmd
-install -m 644 -t usr/local/share/avorioncmd/cronjobs ./root/usr/local/share/avorioncmd/cronjobs/*
+install -m 644 -t ./root/usr/local/share/avorioncmd/cronjobs ./root/usr/local/share/avorioncmd/cronjobs/*
 
-\cp -rf "$AVORION_SERVICEDIR"/mods/ ./root/srv/avorion/mods/*
+cp -rft "$AVORION_SERVICEDIR"/mods/ ./root/srv/avorion/mods/*
 
-echo "Setting permissions for <${AVORION_SERVICEDIR}>:"
+echo "Setting permissions for <${AVORION_SERVICEDIR}>"
 
 chown -R "$AVORION_USER":"$AVORION_ADMIN_GRP" "$AVORION_SERVICEDIR"
 __filesys="$(df "$AVORION_SERVICEDIR" 2>&1 | tail -n 1 | awk '{printf "%s",$1}')"
@@ -82,6 +83,8 @@ if { echo "$__filesys" | grep -q -e 'type xfs' -e 'acl' >/dev/null 2>&1; }; then
 	setfacl -m -R g:"$AVORION_ADMIN_GRP":rwX "$AVORION_SERVICEDIR"
 	setfacl -d -m u:"$AVORION_USER":rwX "$AVORION_SERVICEDIR"
 	setfacl -d -m g:"$AVORION_ADMIN_GRP":rwX "$AVORION_SERVICEDIR"
+else
+	echo "Unable to set ACLS. Installation does not have ACL capability!"
 fi
 
 systemctl daemon-reload
