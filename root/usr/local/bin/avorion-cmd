@@ -32,22 +32,25 @@ function __set_tmux_instance () {
 	
 	for _arg; do
 		shift
-			if [[ "$_arg" == '--skip-active-check' ]]; then
-				__skip_active=1
-				continue
-			fi
+		
+		if [[ "$_arg" == '--skip-active-check' ]]; then
+			__skip_active=1
+			continue
+		fi
 
-			if [[ "$_arg" =~ ^${VALIDCMDS}|${VALIDSWCHS}$ ]]; then
-				echo "$_arg is not a valid galaxy name."
-				echo "Usage: $CMDNAME $_arg <galaxy_name>"
-				exit 1 
-			fi
+		if [[ "$_arg" =~ ^${VALIDCMDS}|${VALIDSWCHS}$ ]]; then
+			echo "$_arg is not a valid galaxy name."
+			echo "Usage: $CMDNAME $_arg <galaxy_name>"
+			exit 1 
+		fi
 
 		set -- "$@" "$_arg"
 	done
 
 	## Die if there are no more arguments left
-	(( $# > 0 )) || return 1
+	if ! (( $# > 0 )); then
+		return 1
+	fi
 
 	# Strip bad chars from user input
 	_tmuxsess="$1"
@@ -434,7 +437,6 @@ function __perform_update () {
 
 	_updatedir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}.updatefiles"
 	_currentdir="${AVORION_SERVICEDIR}/${AVORION_BINDIR}"
-	__sudo_prefix="sudo -u ${AVORION_USER} -g ${AVORION_ADMIN_GRP} -n"
 	_failed=0
 	__auto_update=0
 
@@ -453,7 +455,7 @@ function __perform_update () {
 	fi
 
 	if [[ ! -d /tmp/avorion ]]; then
-		$__sudo_prefix mkdir /tmp/avorion ||\
+		$SUDOPREFIX mkdir /tmp/avorion ||\
 			die "Unable to create tmp directory"
 	fi
 
@@ -468,7 +470,7 @@ function __perform_update () {
 			rm "$_updatedir" || die "Cannot remove bad update directory! <$_updatedir>"
 		fi
 
-		if ! $__sudo_prefix mkdir "$_updatedir"; then
+		if ! $SUDOPREFIX mkdir "$_updatedir"; then
 			die "Cannot create update directory!"
 		fi
 	fi
@@ -480,11 +482,11 @@ function __perform_update () {
 	## Create a file called avorion.updatestatus that will house the current
 	## state of the Avorion update run. 
 	if (( __auto_update > 0 )); then
-		$__sudo_prefix sh -c "echo 'updating:auto:' > '$_updatedir/avorion.updatestatus'"
+		$SUDOPREFIX sh -c "echo 'updating:auto:' > '$_updatedir/avorion.updatestatus'"
 		__do_auto="--auto"
 	fi
 
-	$__sudo_prefix touch /tmp/avorion/updatingavorion.lock ||\
+	$SUDOPREFIX touch /tmp/avorion/updatingavorion.lock ||\
 		die "Unable to create avorion lockfile! Check /tmp usage." &&\
 		printf "${__f_white}Updates locked.${__t_clear}\n"
 
@@ -496,7 +498,7 @@ function __perform_update () {
 		trap - EXIT TERM INT
 		[[ -f $AVORION_SERVICEDIR/$AVORION_BINDIR/avorion.updatestatus ]] &&\
 			rm "$AVORION_SERVICEDIR/$AVORION_BINDIR/avorion.updatestatus"
-		$__sudo_prefix rm /tmp/avorion/updatingavorion.lock &&\
+		$SUDOPREFIX rm /tmp/avorion/updatingavorion.lock &&\
 			printf "${__f_white}Updates unlocked${__t_clear}\n" ||\
 			printf "${__f_red}Failed to unlock updates${__t_clear}\n"
 		exit $?' TERM EXIT INT
@@ -539,7 +541,7 @@ function __perform_update () {
 	#        this to work correctly.
 	printf "\n${__f_white}Running SteamCMD binary <%s>.${__t_clear}\n" "$_steamcmd"
 
-	__steamcmd_command_string="$__sudo_prefix $_steamcmd +login anonymous +force_install_dir $_updatedir +app_update $AVORION_STEAMID validate +exit"
+	__steamcmd_command_string="$SUDOPREFIX $_steamcmd +login anonymous +force_install_dir $_updatedir +app_update $AVORION_STEAMID validate +exit"
 	dbgsay "Using ${__steamcmd_command_string}"
 	printf "${__f_lgray}"
 	if ! $__steamcmd_command_string; then
@@ -577,7 +579,7 @@ function __perform_update () {
 			## will later use to determine whether or not updates are complete and
 			## ready to go.
 			if (( __auto_update > 0 )); then
-				$__sudo_prefix sh -c "echo 'complete:wontstart:brokenmods' > '$_updatedir/avorion.updatestatus'"
+				$SUDOPREFIX sh -c "echo 'complete:wontstart:brokenmods' > '$_updatedir/avorion.updatestatus'"
 				die "Update downloaded, but detected broken mod versions."
 			fi
 		fi
@@ -632,11 +634,11 @@ function __perform_update () {
 	else
 		if (( _failed < 1 )); then
 			printf "${__f_white}\nAuto update complete, and ready for installation.\n"
-			$__sudo_prefix sh -c "echo 'complete:success:' > '$_updatedir/avorion.updatestatus'"
+			$SUDOPREFIX sh -c "echo 'complete:success:' > '$_updatedir/avorion.updatestatus'"
 		else
 			printf "\nAuto update failed! (Unknown reason)\n"
 			if [[ -f "$_updatedir" ]]; then
-				$__sudo_prefix sh -c "echo 'complete:failed:unknown' > '$_updatedir/avorion.updatestatus'"
+				$SUDOPREFIX sh -c "echo 'complete:failed:unknown' > '$_updatedir/avorion.updatestatus'"
 			fi
 			printf "\n"
 			exit 1
@@ -654,8 +656,9 @@ function __perform_update () {
 #	
 #	With the first set being the range of x values, and the second
 #	being the range of y values.
-#	Valid options include:
-#		--backup	Force take backups
+#	
+#	Optional Switches:
+#		--backup	Take a backup of the sectors removed
 function __perform_sector_reset () {
 	local _save _sector _bakdir _secdir
 	local _x1 _x2 _y1 _y2
@@ -784,7 +787,6 @@ function __show_service_instances () {
 	local __strserv __status __color
 	local __version="$( ${AVORION_SERVICEDIR}/${AVORION_BINDIR}/bin/AvorionServer --version )"
 
-
 	if [[ -z "${__version}" ]]; then
 		die "Avorion binary <${AVORION_SERVICEDIR}/${AVORION_BINDIR}/bin/AvorionServer> didnt return version info (received empty response)"
 	fi
@@ -855,17 +857,34 @@ function main () {
 		shift
 
 		case "$_arg" in
-			--debug) VERBOSE=1; continue ;;
-			--allow-screen) NOSCREENCHECK=1; continue ;;
-			--cron) CRON=1; continue ;;
-			--attach) DOATTACH=1; continue ;;
+			--debug)
+				VERBOSE=1
+				continue
+				;;
+
+			--allow-screen)
+				NOSCREENCHECK=1
+				continue
+				;;
+
+			--cron)
+				CRON=1
+				continue
+				;;
+
+			--attach)
+				DOATTACH=1
+				continue
+				;;
+
 			+all) 
 				DOALL=1
-				__units=( $(systemctl list-units 'avorion@*' --no-pager | grep -o "$__unit_string" | awk '{print $1}') )
+				__units=( $(getactive) )
 				dbgsay "$__units"
 				__allowed='stop|restart|exec:is not usable with <+all>'
 				continue
 				;;
+
 			+kill)
 				DOKILL=1
 				__allowed='stop|restart:is not usable with <+kill>'
@@ -915,32 +934,43 @@ function main () {
 			;;
 
 		restart )
-			if (( DOALL < 1 )); then
-				__set_tmux_instance "$2" ||\
-					die "${__err_bad_inst} <$2>"
+			case "$DOALL" in
+				0 )
+					if ! __set_tmux_instance "$2"; then
+						die "${__err_bad_inst} <$2>"
+					fi
 
-				__restart_avorion_instance "$_tmuxsess" &&\
+					if ! __restart_avorion_instance "$_tmuxsess"; then
+						exit 1
+					fi
+
 					exit 0
+					;;
 
-				exit 1
-			fi
-			
-			# If there were any active instances, stop them.
-			if (( "${#__units[@]}" > 0 )); then
-				for __inst in "${__units[@]}"; do
-					__inst="${__inst%%.service}"
-					__inst="${__inst##avorion@}"
-					__restart_avorion_instance "${__inst}"
-				done
-			fi
+				1 )
+					if (( "${#__units[@]}" > 0 )); then
+						for __inst in "${__units[@]}"; do
+							__inst="${__inst%%.service}"
+							__inst="${__inst##avorion@}"
+							__restart_avorion_instance "${__inst}"
+						done
+					fi
+					;;
+				
+				* )
+					printf "DOALL has an undefined value: ${DOALL}\n" >&2
+					exit 1
+					;;
+			esac
 			;;
 		
 		view | attach )
 			__check_screen_tmux &&\
 				die "$CMDNAME $1 should not be run in a screen or tmux session"
 
-			__set_tmux_instance "$2" \
-				|| die "${__err_bad_inst} <$2>"
+			if ! __set_tmux_instance "$2"; then
+				die "${__err_bad_inst} <$2>"
+			fi
 
 			"$_tmuxcmd" -f "${_tmuxconf}" -S "$_tmuxsock" attach -r ||\
 				exit 1 &&\
@@ -949,8 +979,9 @@ function main () {
 		
 		exec )
 				if (( DOALL < 1 )); then
-					__set_tmux_instance "$2" \
-						|| die "${__err_bad_inst} <$2>"
+					if ! __set_tmux_instance "$2"; then
+						die "${__err_bad_inst} <$2>"
+					fi
 					
 					if (( DOATTACH > 0 )); then
 						__check_screen_tmux &&\
@@ -1023,12 +1054,13 @@ function main () {
 			;;
 
 		usage | --usage | -u )
-			say "Avorion Manager v${CMDVERS}"
-			say "Usage: ${CMDNAME} <command> <optons> <parameters>"
+			echo "Avorion Manager v${CMDVERS}"
+			echo "Usage: ${CMDNAME} <command> <optons> <parameters>"
 			exit 0
 			;;
 
 		--help | help | -h )
+			# shellcheck disable=SC1042,SC1041
 			cat << _EOF_
 Avorion Commander v${CMDVERS}
 Usage: ${CMDNAME} <command> <options> <parameters>

@@ -39,13 +39,7 @@ declare FORCE=0
 declare CRON=0
 declare VERBOSE=0
 declare NOSCREENCHECK=0
-
-# void say <string, ...>
-#	Ouput the strings passed to stdout and return
-function say () {
-	for _l; do printf '%s\n' "${_l}"; done
-	return 0
-} 
+declare TMP_FILE=0
 
 # bool dbssay <string, ...>
 #	If the script is currently in debug mode, `say`
@@ -69,7 +63,7 @@ function die () {
 		shift; shift
 	fi
 
-	say "Error: $1"
+	echo "Error: $1"
 	exit "$_code"
 }
 
@@ -93,7 +87,7 @@ function yesno () {
 				return 1
 				;;
 			?)
-				say "Please enter yes or no."
+				echo "Please enter yes or no."
 				;;
 		esac
 	done
@@ -112,6 +106,81 @@ function plural () {
 	fi
 
 	die "Function <plural> recieved <$1> rather than an int"
+}
+
+# bool setlock (str lockname)
+#	Creates a lockfile for use with funtions that can
+#	only ever have one instance running, or to detect
+#	when certain operations are underway
+#
+#	Returns:
+#		0	Successful lock
+#		1	Failed lock
+#
+#	Optional Switches
+#		--clear		Clears the lock specified
+function setLock () {
+	local __lockname="$1"
+	local __clearlock=0
+	__lockname="${__lockname//[^a-zA-Z]/}"
+	
+	for __arg; do
+		shift
+		if [[ "$__arg" == "--clear" ]]; then
+			__clearlock=1
+		fi
+		set - "$@" "$__arg"
+	done
+
+	case "$__clearlock" in
+		0 )
+			if ! checkLock "$__lockname"; then
+				if ! $SUDOPREFIX printf '%s' "$$" > "/tmp/avorion.$__lockname"; then
+					echo "Unable to create lock: $__lockname" >&2
+					return 1
+				fi
+				return 0
+			fi
+			;;
+		
+		1 )
+			if checkLock "$__lockname"; then
+				if ! $SUDOPREFIX rm "/tmp/avorion.$__lockname"; then
+					echo "Unable to remove old lockfile!" >&2
+					return 1
+				fi
+			fi
+			;;
+	esac
+
+	return 0
+}
+
+# bool checkLock (str lockname)
+#	Detects whether a lock is currently
+#	in place.
+#
+#	Returns:
+#		0	Lock is in place
+#		1	No lock in place
+function checkLock () {
+	local __lockname="$1"
+	__lockname="${__lockname//[^a-zA-Z]/}"
+	
+	if [[ -f /tmp/avorion."$__lockname" ]]; then
+		return 0
+	fi
+
+	return 1
+}
+
+# void getactive (void)
+#	Prints a list of active avorion@ units to stdout.
+function getactive () {
+	systemctl list-units 'avorion@*' |\
+	   	grep "$__unit_string" |\
+	   	awk '{print $1}' 2>/dev/null |\
+	   	sed 's,^avorion@,,; s,\.service$,,'
 }
 
 # int __validate_setting_conf <void>
@@ -185,41 +254,48 @@ function __validate_setting_conf () {
 	done < /etc/avorionsettings.conf
 
 	source /etc/avorionsettings.conf
-	
-	return 0
 }
 
 # bool __check_requirements <void>
 #	Checks required software versions and exits if either
 #	the required software is not present in $PATH or if it
 #	does not meet the minimum version requirements.
+#
+#	Optional Switches:
+#		None
 function __check_requirements () {
-	local -A _requires
-	local _prog _arg _string
+	local -A __requires
+	local __prog __arg __string
 	
 	# Required version strings, prepended with the argument
 	# that will invoke them.
-	_requires[sed]='--version=^sed \(GNU sed\) [0-9]{0,1}[4-9].*'
-	_requires[bash]='--version=^GNU bash, version [0-9]{0,1}[4-9].*'
-	_requires[tmux]='skip'
-	_requires[mktemp]='skip'
+	__requires[sed]='--version=^sed \(GNU sed\) [0-9]{0,1}[4-9].*'
+	__requires[bash]='--version=^GNU bash, version [0-9]{0,1}[4-9].*'
+	__requires[tmux]='skip'
+	__requires[mktemp]='skip'
 
-	for _prog in "${!_requires[@]}"; do
-		_arg="${_requires["$_prog"]%%=*}"
-		_string="${_requires["$_prog"]##*=}"
+	for __prog in "${!__requires[@]}"; do
+		__arg="${__requires["$__prog"]%%=*}"
+		__string="${__requires["$__prog"]##*=}"
 
-		if ! command -v "$_prog" >/dev/null 2>&1; then
-			die "${_prog} is required but is either not installed, or not in the execution PATH"
+		if ! command -v "$__prog" >/dev/null 2>&1; then
+			die "${__prog} is required but is either not installed, or not in the execution PATH"
 		fi
 
-		if [[ "${_requires[$_prog]}" == 'skip' ]]; then
+		if [[ "${__requires[$__prog]}" == 'skip' ]]; then
 			continue
 		fi
 
-		if ! [[ "$("$_prog" "$_arg")" =~ $_string ]]; then
-			die "${_prog} doesnt meet the minimum version requirements"
+		if ! [[ "$("$__prog" "$__arg")" =~ $__string ]]; then
+			die "${__prog} doesnt meet the minimum version requirements"
 		fi
 	done
+ 
+	if [[ -f "$STEAMCMD_BIN" ]] || command -v "$STEAMCMD_BIN" >/dev/null 2>&1; then
+        return 0
+    fi 
+
+	die "SteamCMD definition is undefined, or invalid"
 }
 
 # int __validate_process_exec <ARGV>
@@ -241,24 +317,24 @@ function __assert_valid_execution () {
 	fi
 }
 
-function getactive () {
-	systemctl list-units 'avorion@*' |\
-	   	grep "$__unit_string" |\
-	   	awk '{print $1}' 2>/dev/null |\
-	   	sed 's,^avorion@,,; s,\.service$,,'
+# void __setup_tmp (void)
+#	Creates and sets our global tmpfile for IO manipulation.
+function __setup_tmp () {
+	TMP_FILE="$(mktemp)"
+	if [[ -z "$TMP_FILE" ]]; then
+		echo "Cannot generate tmpfile! Check tmp usage."
+		exit 1
+	elif [[ ! -w "$TMP_FILE" ]]; then
+		echo "Cannot write to tmpfile <$TMP_FILE>. Check tmp permissions."
+		exit 1
+	fi
 }
 
 ## Prechecks before returning to the primary point of execution
-__check_requirements
-__assert_valid_execution
 __validate_setting_conf
+__assert_valid_execution
+__setup_tmp
 
-## Done last, and declared so that this can be overidden if need be
-declare TMP_FILE="$(mktemp)"
-if [[ -z "$TMP_FILE" ]]; then
-	echo "Cannot generate tmpfile! Check tmp usage."
-	exit 1
-elif [[ ! -w "$TMP_FILE" ]]; then
-	echo "Cannot write to tmpfile <$TMP_FILE>. Check tmp permissions."
-	exit 1
-fi
+## Our final declarations. These need to be performed *after*
+## the initial prechecks and sourcing, so we just do them last.
+readonly SUDOPREFIX="sudo -u ${AVORION_USER} -g ${AVORION_ADMIN_GRP} -n"
