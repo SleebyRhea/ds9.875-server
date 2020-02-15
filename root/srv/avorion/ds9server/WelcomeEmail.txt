@@ -6,7 +6,9 @@ Welcome to the DeepSpace 9.875 server!
  Our Discord: https://discord.gg/ZangShh
 =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-First off, we recommend that you join our Discord, as our community is quite active there and we post updates on what we're working on rather frequently. You also have a vote in where this server takes us in our polls channel, where we'll occasionally query the community for their thoughts on if/how we should implement various things on our server. If you have any questions, feel free to ask! We have a pretty friendly community overall, and we'd like to keep it that way. On that note, as far as rules go, we have the following:
+Please review our rules by running: /rules
+
+First off, we recommend that you join our Discord, as our community is quite active there and we post updates on what we're working on rather frequently. You also have a vote in where this server takes us in our polls channel, where we'll occasionally query the community for their thoughts on if/how we should implement various things on our server. If you have any questions, feel free to ask! We have a pretty friendly community overall, and we'd like to keep it that way. On that note, as far as rules go, we have the following basic ones:
 
 1. Be kind.
 2. Be respectful.
