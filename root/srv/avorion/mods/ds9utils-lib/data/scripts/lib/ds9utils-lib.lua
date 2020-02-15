@@ -28,7 +28,7 @@ do
         local __modinfo = ""
         local __timeinfo = "(" .. os.date("%Y-%m-%d %H:%M:%S") .. ") "
 
-        if __d.i_loadermod then
+        if type(__d.i_loadermod) == "string" then
             __modinfo = "[" .. __d.i_loadermod .. "] "
         end
 
