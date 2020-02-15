@@ -94,7 +94,7 @@ function __check_update_status() {
         return 0
     fi
 
-    __status="$(< "${AVORION_SERVICEDIR}/${AVORION_BINDIR}".updatefiles/avorion.updatestatus | tr -d '\n')"
+    __status="$(< "${AVORION_SERVICEDIR}/${AVORION_BINDIR}".updatefiles/avorion.updatestatus tr -d '\n')"
     if ! [[ "$__status" =~ ^[[^:]][[^:]]*:[[^:]][[^:]]*:[[^:]][[^:]]*$ ]]; then
         echo "Invalid update status: <${__status}>" >2
         return 0
