@@ -144,17 +144,21 @@ function __validate_setting_conf () {
 		__err="Configuration error on line ${i} of /etc/avorionsettings.conf"
 		
 		# We dont care about blank lines and comments, so skip those
-		[[ "${__l}" =~ ^[[:space:]]*#*$ ]] && continue
+		if [[ "${__l}" =~ ^[[:space:]]*#*$ ]]; then
+			continue
+		fi
 
 		# Ensure the line contains no invalid symbols
-		[[ "${__l}" =~ $__bad_symbols ]] &&\
+		if [[ "${__l}" =~ $__bad_symbols ]]; then
 			die "${__err} -- Invalid chars present: <$( printf '%q' "${__l}") >"
+		fi
 		
 		# Ensure that the variable declaration syntax is valid.
 		# We also use this to assign the captured strings to the
 		# BASH_REMATCH environment variable (bash does this automatically)
-		[[ "${__l}" =~ ^([^[:space:]][^[:space:]]*)=([^[:space:]][^[:space:]]*)$ ]] ||\
+		if ! [[ "${__l}" =~ ^([^[:space:]][^[:space:]]*)=([^[:space:]][^[:space:]]*)$ ]]; then
 			die "${__err} -- Bad syntax: <$( printf '%q' "${__l}")>"
+		fi
 
 		# Ensure that the variable being declared is actually
 		# a setting that we will be making use of.
