@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Administration>
+	<administration>
+		<defaultAuthorizationGroup>
+			<commands>
+				<command name="help"/>
+				<command name="invite"/>
+				<command name="join"/>
+				<command name="leader"/>
+				<command name="leave"/>
+				<command name="players"/>
+				<command name="seed"/>
+				<command name="selfinfo"/>
+				<command name="suicide"/>
+				<command name="teleporttoship"/>
+				<command name="trade"/>
+				<command name="version"/>
+				<command name="w"/>
+				<command name="whisper"/>
+                <command name="rules"/>
+			</commands>
+		</defaultAuthorizationGroup>
+		<authorizationGroups>
+			<group name="Moderators">
+				<commands>
+					<command name="addcrew"/>
+					<command name="addgood"/>
+					<command name="ban"/>
+					<command name="banip"/>
+					<command name="blacklist"/>
+					<command name="changeOwner"/>
+					<command name="cheat"/>
+					<command name="cheattarget"/>
+					<command name="colldamage"/>
+					<command name="destroy"/>
+					<command name="devmode"/>
+					<command name="difficulty"/>
+					<command name="echo"/>
+					<command name="foundgate"/>
+					<command name="give"/>
+					<command name="ground"/>
+					<command name="groups"/>
+					<command name="kick"/>
+					<command name="like"/>
+					<command name="lootunlocker"/>
+					<command name="moduleviewer"/>
+					<command name="mute"/>
+					<command name="pause"/>
+					<command name="playerinfo"/>
+					<command name="report"/>
+					<command name="resourcetool"/>
+					<command name="run"/>
+					<command name="save"/>
+					<command name="say"/>
+					<command name="status"/>
+					<command name="teleport"/>
+					<command name="unban"/>
+					<command name="unbanip"/>
+					<command name="unground"/>
+					<command name="unmute"/>
+					<command name="whitelist"/>
+				</commands>
+				<users/>
+			</group>
+		</authorizationGroups>
+		<administrators>
+			<admin name="FyfeGaming" id="76561198018788320"/>
+			<admin name="Kamots" id="76561198043221839"/>
+			<admin name="Herzer1234" id="76561198053338139"/>
+			<admin name="Arcturus615" id="76561198073853023"/>
+			<admin name="The Queen of Dragons" id="76561198122155025"/>
+			<admin name="Chadwick  Douchebinn" id="76561198154709609"/>
+		</administrators>
+	</administration>
+</Administration>

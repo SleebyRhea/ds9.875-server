@@ -1,0 +1,17 @@
+# == DS9 Server Rules ==
+# NOTE: This list is subject to change at any time and it is your responsibility to keep up to date with changes on your own accord.
+Cheating/Exploiting or using any means to get ahead in devious ways are bannable offences.
+    - Players are expected to come forth with any information on such activities.
+
+Leaving a ship in the guardian sector unattended (0,0) will result in the deletion of the ship. (15 minutes maximum)
+    - Leaving a ship for the sole purpose of killing and salvaging the guardian while offline/AFK(Away from Keyboard)
+    - Will result in the deletion of the ship and a temporary ban. (length determined by staff)
+
+Selling/Trading/Giving Avorion to players who have not crossed the barrier through the gate, Warnings will be given out for doing so.
+    - Repeat offenders will Be Temporary banned(Time determined by staff) Or Permanently banned.
+
+Destroying NPC Faction stations (Except pirates) Is Forbidden.
+    - Offenders will be Kicked, repeaters will be temporarily banned(Time determined by staff)
+
+No Baiting pirates into player sectors for the intention of killing the stations. Immediate Ban.
+    - Destroying trade ships visiting player stations is also an offense.

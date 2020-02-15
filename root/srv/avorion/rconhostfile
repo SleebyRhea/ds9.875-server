@@ -1,0 +1,4 @@
+[ds9server]
+hostname = 10.147.19.145
+port = 27015
+password = 123123

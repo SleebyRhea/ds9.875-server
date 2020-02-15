@@ -56,19 +56,20 @@ if ! mkdir -p /usr/local/share/avorioncmd/{cronjobs,common}; then
 	exit 1
 fi
 
-if ! mkdir -p "$AVORION_SERVICEDIR"/{mods,sockets}; then
+if ! mkdir -p "$AVORION_SERVICEDIR"/{mods,sockets,ds9server}; then
 	echo "Failed to create service directories!"
 	exit 1
 fi
 
 install -m 644 ./root/usr/local/share/avorioncmd/common/common.sh /usr/local/share/avorioncmd/common/common.sh
 install -m 644 ./root/etc/avorioncmd-tmux.conf /etc/avorioncmd-tmux.conf
-#install -m 644 ./root/etc/avorionsettings.conf /etc/avorionsettings.conf
+install -m 644 ./root/etc/avorionsettings.conf /etc/avorionsettings.conf
 install -m 644 ./root/etc/systemd/system/avorionservers.target /etc/systemd/system/avorionservers.target
 install -m 644 ./root/etc/systemd/system/avorion@.service /etc/systemd/system/avorion@.service
 install -m 0440 ./root/etc/sudoers.d/avorion-ds9 /etc/sudoers.d/avorion-ds9
 install -m 755 ./root/usr/local/bin/avorion-cmd /usr/local/bin/avorion-cmd
-install -m 644 -t ./root/usr/local/share/avorioncmd/cronjobs ./root/usr/local/share/avorioncmd/cronjobs/*
+install -m 644 -t /usr/local/share/avorioncmd/cronjobs ./root/usr/local/share/avorioncmd/cronjobs/*
+install -m 644 -t /srv/avorion/ds9server ./root/srv/avorion/ds9server/*
 
 cp -rft "$AVORION_SERVICEDIR"/mods/ ./root/srv/avorion/mods/*
 
@@ -89,5 +90,9 @@ fi
 
 systemctl daemon-reload
 
-echo 'Done. Make sure to set the ADMIN value in </etc/systemd/system/avorion@.service> and run sudo systemctl daemon-reload!!'
-echo 'Cronjobs are left off for now, configure them via crontab -e'
+echo 'Done.'
+echo
+echo 'NOTE: Make sure to set the ADMIN value in </etc/systemd/system/avorion@.service> and run: sudo systemctl daemon-reload'
+echo 'NOTE: Cronjobs are left off for now, configure them via: crontab -e root'
+echo 'NOTE: Before setting up cronjobs, make sure to setup the following rcon implentation: https://github.com/n0la/rcon'
+echo '(You will need to configure the server.ini and the /srv/avorion/rconhostfile before the isalivecron.sh cron will work)'
