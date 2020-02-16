@@ -1,15 +1,11 @@
-self.data.noDecayTime = 60 * 5 --Set the decay timer to 5 minutes
-
 if onServer() then
-
-    -- Remove on update after decay timer.
-    function WarZoneCheck.updateServer(timeStep)
-        -- while the timer is running, no decay happens
-        self.data.noDecayTimer = math.max(0, self.data.noDecayTimer - timeStep)
-
-        if self.data.noDecayTimer == 0 then
-            WarZoneCheck.cleanup()
-        end
+	package.path = package.path .. ";data/scripts/lib/?.lua"
+	include("ds9utils-lib")("ds9utils-scriptmods")
+	
+	-- Run our cleanup on update. Updates are every 8 hours, so this should
+	-- cause no issues
+	function WarZoneCheck.updateServer(timeStep)
+		WarZoneCheck.cleanup()
     end
 
     -- Remove on restoration.
@@ -19,12 +15,20 @@ if onServer() then
 
     -- Cleanup function that removes the Warzone Check script from the sector
     -- entirely. This function *should* result in a clean removal.
-    function WarZoneCheck.cleanup()
+	function WarZoneCheck.cleanup()
+		print("Cleaning up warzone")
+		local sector = Sector()
         WarZoneCheck.undeclareWarZone()
-        local sector = Sector()
         sector:unregisterCallback("onDestroyed", "onDestroyed")
         sector:unregisterCallback("onBoardingSuccessful", "onBoardingSuccessful")
         sector:unregisterCallback("onRestoredFromDisk", "onRestoredFromDisk")
-        sector:removeScript("warzonecheck.lua")
-    end
+	end
+	
+	-- Just update every hour from here on out. We don't want to wholesale *remove*
+	-- the script (in case we want to make adjustments later), but it is better to
+	-- have it update *very* infrequently since it wont be doing anything. As it is,
+	-- this sets it to every 8 hours.
+	function WarZoneCheck.getUpdateInterval()
+		return 60 * 60 * 8
+	end
 end
