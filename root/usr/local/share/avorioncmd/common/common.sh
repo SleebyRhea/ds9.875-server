@@ -1,5 +1,13 @@
 #!/bin/bash
+#
+# common.sh:
+#	Common functions used for all bash based scripts for
+#	the avorioncmd utility set. Also performs process execution
+#	validation checks on sourcing. This script is NOT intended
+#	to be run on its own, and should be sourced as early as
+#	possible by the calling script.
 
+# shellcheck disable=SC2034
 if [ -z "$BASH_VERSION" ]; then
 	echo 'common.sh should *only* be sourced from a bash shell/script'
 	exit 1
@@ -32,156 +40,21 @@ readonly __f_lgray='\033[0;37m'   ## Light Gray
 readonly __b_white='\u001b[47m'   ## White
 
 ## Regex Matches
-readonly __unit_string='^[[:space:]]*avorion@[^[:space:]][^[:space:]]*.service[[:space:]][[:space:]]*loaded[[:space:]][[:space:]]*active[[:space:]][[:space:]]*running'
+readonly REGEX_AVORIONUNIT='^[[:space:]]*avorion@[^[:space:]][^[:space:]]*.service[[:space:]][[:space:]]*loaded[[:space:]][[:space:]]*active[[:space:]][[:space:]]*running'
 
 ## Flags and Misc
 declare FORCE=0
 declare CRON=0
-declare VERBOSE=0
+declare VERBOSITY=0
 declare NOSCREENCHECK=0
 declare TMP_FILE=0
+declare ASSUMEANSWER=0
+declare SHOWTIMESTAMPS=0
 
-# bool dbssay <string, ...>
-#	If the script is currently in debug mode, `say`
-#	the arguments passed to this function. Otherwise,
-#	return code 1
-function dbgsay () {
-	if (( "${VERBOSE}" > 0 )); then
-		for __arg; do
-			printf "${__f_yellow}%s${__t_clear}\n" "$__arg"
-		done
-	fi
-}
 
-# int die <options> <string>
-#	Output the strings passed to stdout then exit
-#	with status code 1 (or the code given with -c)
-function die () {
-	local _code=1
-	if [[ "$1" == '-c' ]] && [[ "$2" =~ ^[0-9][0-9]*$ ]]; then
-		_code="$2"
-		shift; shift
-	fi
-
-	echo "Error: $1"
-	exit "$_code"
-}
-
-# bool yesno <string>
-#	Get a yes or no response from the user and
-#	return accordingly (0 for yes, 1 for no).
-#	If a string is passed, provide the user with
-#	that string as a prompt.
-function yesno () {
-	local _prompt _answer
-	_prompt="${1-Yes/No}"
-
-	while true; do
-		printf "[${_prompt}]> "
-		read -r _answer
-		case "${_answer}" in
-			[yY][eE][sS] | [yY] )
-				return 0
-				;;
-			[nN][oO] | [nN] )
-				return 1
-				;;
-			?)
-				echo "Please enter yes or no."
-				;;
-		esac
-	done
-}
-
-# int plural <int>
-#	Given an int, print an s to the caller if said
-#	int does not equal 1
-function plural () {
-	if [[ "$1" =~ ^[0-9]+$ ]]; then
-		if (( $1 != 1 )); then
-			printf '%s' 's'
-			return 0
-		fi
-		return 0
-	fi
-
-	die "Function <plural> recieved <$1> rather than an int"
-}
-
-# bool setlock (str lockname)
-#	Creates a lockfile for use with funtions that can
-#	only ever have one instance running, or to detect
-#	when certain operations are underway
-#
-#	Returns:
-#		0	Successful lock
-#		1	Failed lock
-#
-#	Optional Switches
-#		--clear		Clears the lock specified
-function setLock () {
-	local __lockname="$1"
-	local __clearlock=0
-	__lockname="${__lockname//[^a-zA-Z]/}"
-	
-	for __arg; do
-		shift
-		if [[ "$__arg" == "--clear" ]]; then
-			__clearlock=1
-		fi
-		set - "$@" "$__arg"
-	done
-
-	case "$__clearlock" in
-		0 )
-			if ! checkLock "$__lockname"; then
-				if ! $SUDOPREFIX printf '%s' "$$" > "/tmp/avorion.$__lockname"; then
-					echo "Unable to create lock: $__lockname" >&2
-					return 1
-				fi
-				return 0
-			fi
-			;;
-		
-		1 )
-			if checkLock "$__lockname"; then
-				if ! $SUDOPREFIX rm "/tmp/avorion.$__lockname"; then
-					echo "Unable to remove old lockfile!" >&2
-					return 1
-				fi
-			fi
-			;;
-	esac
-
-	return 0
-}
-
-# bool checkLock (str lockname)
-#	Detects whether a lock is currently
-#	in place.
-#
-#	Returns:
-#		0	Lock is in place
-#		1	No lock in place
-function checkLock () {
-	local __lockname="$1"
-	__lockname="${__lockname//[^a-zA-Z]/}"
-	
-	if [[ -f /tmp/avorion."$__lockname" ]]; then
-		return 0
-	fi
-
-	return 1
-}
-
-# void getactive (void)
-#	Prints a list of active avorion@ units to stdout.
-function getactive () {
-	systemctl list-units 'avorion@*' |\
-	   	grep "$__unit_string" |\
-	   	awk '{print $1}' 2>/dev/null |\
-	   	sed 's,^avorion@,,; s,\.service$,,'
-}
+####################################
+## Execution Validation Functions ##
+####################################
 
 # int __validate_setting_conf <void>
 #	Run validation checks on the configuration file.
@@ -253,6 +126,7 @@ function __validate_setting_conf () {
 		fi
 	done < /etc/avorionsettings.conf
 
+	# shellcheck disable=SC1091
 	source /etc/avorionsettings.conf
 }
 
@@ -291,11 +165,11 @@ function __check_requirements () {
 		fi
 	done
  
-	if [[ -f "$STEAMCMD_BIN" ]] || command -v "$STEAMCMD_BIN" >/dev/null 2>&1; then
-        return 0
+	if [[ ! -f "$STEAMCMD_BIN" ]] && ! command -v "$STEAMCMD_BIN" >/dev/null 2>&1; then
+		die "SteamCMD definition is undefined, or invalid"
     fi 
 
-	die "SteamCMD definition is undefined, or invalid"
+	return 0
 }
 
 # int __validate_process_exec <ARGV>
@@ -315,10 +189,42 @@ function __assert_valid_execution () {
 	if [[ ! "$(groups)" =~ (^$AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP | $AVORION_ADMIN_GRP$) ]] && [[ "$(id -u)" != 0 ]]; then
 		die "This command can only be run by a user with the group <${AVORION_ADMIN_GRP}> or by root."
 	fi
+
+	## No point in continuing if the service directory doesnt exist/cant be accessed.
+	if ! ( cd "$AVORION_SERVICEDIR" >/dev/null 2>&1 ); then
+		die "Failed to cd into service directory <$AVORION_SERVICEDIR>"
+	fi
 }
 
+# bool __check_screen_tmux (void)
+#	Return true if we are in a screen/tmux session, otherwise
+#	return false.
+function __check_screen_tmux () {
+	# Skip this if --no-screen-enforce is passed
+	if (( NOSCREENCHECK > 0 )); then
+		return 1
+	fi
+
+	# Die if we are running in a screen or tmux session.
+	if [[ -n "$TMUX" ]] || [[ "$TERM" =~ ^(screen|tmux) ]] || [[ -n "$TMUX_PANE" ]] || [[ -n "$STY" ]]; then
+		return 0
+	fi
+
+	return 1
+}
+
+
+#####################
+## Setup Functions ##
+#####################
+
 # void __setup_tmp (void)
-#	Creates and sets our global tmpfile for IO manipulation.
+#	Creates and sets our global tmpfile for IO manipulation, it also
+#	ensures that our templock directory exists, and quits if we cant
+#	create it.
+#
+#	Optional Switches:
+#		None
 function __setup_tmp () {
 	TMP_FILE="$(mktemp)"
 	if [[ -z "$TMP_FILE" ]]; then
@@ -330,6 +236,314 @@ function __setup_tmp () {
 	fi
 }
 
+
+#####################
+## Operation Locks ##
+#####################
+
+# bool setlock (str lockname)
+#	Creates a lockfile for use with funtions that can
+#	only ever have one instance running, or to detect
+#	when certain operations are underway
+#
+#	Returns:
+#		0	Successful lock
+#		1	Failed lock
+#
+#	Optional Switches:
+#		--clear		Clears the lock specified
+function setLock () {
+	local __lockname="$1"
+	local __clearlock=0
+	__lockname="${__lockname//[^a-zA-Z]/}"
+	
+	for __arg; do
+		shift
+		if [[ "$__arg" == "--clear" ]]; then
+			__clearlock=1
+		fi
+		set - "$@" "$__arg"
+	done
+
+	case "$__clearlock" in
+		0 )
+			if ! checkLock "$__lockname"; then
+				if ! $SUDOPREFIX printf '%s' "$$" > "/tmp/avorion.$__lockname"; then
+					echo "Unable to create lock: $__lockname" >&2
+					return 1
+				fi
+				return 0
+			fi
+			;;
+		
+		1 )
+			if checkLock "$__lockname"; then
+				if ! $SUDOPREFIX rm "/tmp/avorion.$__lockname"; then
+					echo "Unable to remove old lockfile!" >&2
+					return 1
+				fi
+			fi
+			;;
+	esac
+
+	return 0
+}
+
+# bool checkLock (str lockname)
+#	Detects whether a lock is currently
+#	in place.
+#
+#	Returns:
+#		0	Lock is in place
+#		1	No lock in place
+#
+#	Optional Switches:
+#		None
+function checkLock () {
+	local __lockname="$1"
+	__lockname="${__lockname//[^a-zA-Z]/}"
+	
+	if [[ -f /tmp/avorion."$__lockname" ]]; then
+		return 0
+	fi
+
+	return 1
+}
+
+
+########################
+## Printing Functions ##
+########################
+
+# void message (str ...)
+#	Output a message (or messages) with a given formatting.
+#
+#	Optional Switches:
+#		--debug		Specify that the message is to be used when verbosity
+#					is higher then 2 (aka, when debug mode is enabled).
+#
+#		--verbose	Specify that the message should only be output when
+#					verbosity is higher than 1 (the default)
+#
+#		--header	Specify a header-like formatting. Usually used
+#					when beginning execution of a function.
+#
+#		--function	(default) Specify a sub header-like formatting. Usually 
+#					used when a function has output that falls under a header.
+#
+#		--error		Formatting that indicates an error.
+function message () {
+	local __color="$__f_dgray"
+	local __formatting='%b>> %s%b\n'
+	for __arg; do 
+		shift
+		case "$__arg" in
+			--debug )
+				if (( VERBOSITY < 3 )); then
+					return 0
+				fi
+
+				__color="$__f_yellow"
+				__formatting='%bDBG> %s%b\n'
+				;;
+
+			--verbose )
+				if (( VERBOSITY < 2 )); then
+					return 0
+				fi
+				;;
+
+			--header )
+				__formatting='%b%s\n'
+				__color="$__f_white"
+				;;
+			
+			--function )
+				__color="$__f_dgray"
+				__formatting='%b>> %s%b\n'
+				;;
+			
+			--error )
+				__color="$__f_red"
+				__formatting='%bERR> %s%b\n'
+				;;
+		esac
+		set -- "$@" "$__arg"
+	done
+	
+	#shellcheck disable=SC2059
+	for __arg; do
+		if (( SHOWTIMESTAMPS > 0 )); then
+			printf '[%s] ' "$(date +'%Y-%m-%d %I:%M%z')"
+		fi
+		printf "$__formatting" "$__arg"
+	done
+}
+
+#######################
+## Utility Functions ##
+#######################
+
+# int die <options> (str)
+#	Output the strings passed to stdout then exit
+#	with the default status code if 1
+#
+#	Optional Switches:
+#		-c		Set the status code to return on exit (1-255)
+function die () {
+	local __code=1
+
+	## Catch -c
+	if [[ "$1" == '-c' ]] && [[ "$2" =~ ^[0-9][0-9]*$ ]]; then
+		__code="$2"
+		shift; shift
+	fi
+	
+	## Print the main error, shift, and then print any other
+	## positional parameters to stdout normally.
+	echo "Error: $1"; shift
+	for __arg; do
+		echo "$__arg"
+	done
+
+	exit "$__code"
+}
+
+# bool yesno (str prompt)
+#	Get a yes or no response from the user and return accordingly
+#	(0 for yes, 1 for no). If a string is passed, provide the user
+#	with that string as a prompt.
+#
+#	If the environmental variable ASSUMEANSWER is non-zero, then
+#	determine if it is a valid value and return accordingly without
+#	prompting the user. 1=yes, 2=no
+#
+#	Optional Switches:
+#		None
+function yesno () {
+	local _prompt _answer
+	_prompt="${1-Yes/No}"
+
+	## Implements --assume-yes and --assume-no. Since that
+	## global will *only* ever be 0-2, with 0 == off, 1 == yes,
+	## and 2 == no then just subtract 1 and we have our return
+	##
+	## Anything else is an error and is skipped with an error
+	## being thrown.
+	if (( ASSUMEANSWER > 0 && ASSUMEANSWER < 3)); then
+		return "$((ASSUMEANSWER-1))"
+	elif (( ASSUMEANSWER > 3 )); then
+		message --debug "ASSUMEANSWER has an unknown value: [$ASSUMEANSWER]"
+	fi
+
+	while true; do
+		printf "[%s]> " "${_prompt}"
+		read -r _answer
+		case "${_answer}" in
+			[yY][eE][sS] | [yY] )
+				return 0
+				;;
+			[nN][oO] | [nN] )
+				return 1
+				;;
+			?)
+				echo "Please enter yes or no."
+				;;
+		esac
+	done
+}
+
+# int plural (int)
+#	Given an int, print an s to the caller if said
+#	int does not equal 1
+#
+#	Optional Switches:
+#		None
+function plural () {
+	if [[ "$1" =~ ^[0-9]+$ ]]; then
+		if (( $1 != 1 )); then
+			printf '%s' 's'
+			return 0
+		fi
+		return 0
+	fi
+
+	die "Function <plural> recieved <$1> rather than an int"
+}
+
+# void showtime (int time)
+#	Given a number of seconds, output a string describing
+#	how many hours, minutes, and/or seconds are remaining.
+#	The format is minimal so, for example, if the number is
+#	10, the output is:
+#		10 seconds
+#	
+#	Likewise for minutes and hours:
+#		60		1 minute
+#		120		2 minutes
+#		3600	1 hour
+#
+#	NOTE: This function *intentionally* omits seconds if there
+#	are more than 60!
+#
+#	Optional Switches:
+#		None
+function showtime () {
+	if ! [[ "$1" =~ ^[0-9][0-9]*$ ]]; then
+		die "Invalid variable given to timemetric: <$1>"
+	fi
+
+	local __output __hour __min __time
+	
+	## Save ourselves some pointless math at the cost of
+	## a few seconds worth of accuracy. If need be, can
+	## be revised later on.
+	if (( $1 < 60)); then
+		printf '%s second%s' "$1" "$(plural "$1")"
+		return 0
+	fi
+
+	__output=''
+	__time="$1"
+	__hour=$((__time/3600))
+	__min=$((__time%3600))
+	__min=$((__min/60))
+
+	if (( __hour > 0 )); then
+		__output="${__hour} hour$(plural "$__hour")"
+		if (( __min > 0 )); then
+			__output="${__output} and "
+		fi
+	fi
+
+	if (( __min > 0 )); then
+		__output="${__output}${__min} minute$(plural "$__min")"
+	fi
+
+	printf '%s' "$__output"
+}
+
+# void getactive (void)
+#	Prints a list of active avorion@ units to stdout. Unit
+#	formatting is stripped of all occurences of avorion@ and 
+#	.service to standardize all uses of said instances. Prevents
+#	cases where the service name is repeated ala:
+#		avorion@avorion@avorion@galaxyname.service
+#
+#	Optional Switches:
+#		None
+function getactive () {
+	systemctl list-units 'avorion@*' |\
+	   	grep "$REGEX_AVORIONUNIT" |\
+	   	awk '{print $1}' 2>/dev/null |\
+	   	sed 's,avorion@,,; s,\.service,,'
+}
+
+
+###########
+## BEGIN ##
+###########
+
 ## Prechecks before returning to the primary point of execution
 __validate_setting_conf
 __assert_valid_execution
@@ -338,3 +552,48 @@ __setup_tmp
 ## Our final declarations. These need to be performed *after*
 ## the initial prechecks and sourcing, so we just do them last.
 readonly SUDOPREFIX="sudo -u ${AVORION_USER} -g ${AVORION_ADMIN_GRP} -n"
+
+## Process arguments that are common between all scripts that use
+## common.sh. Removes the paramters found in the positional params
+## array ($@)
+for __arg; do
+	shift
+	case "$__arg" in
+		--debug )
+			VERBOSITY=3
+			continue
+			;;
+		
+		--verbose )
+			if (( VERBOSITY < 3 )); then
+				VERBOSITY=2
+				continue
+			fi
+			;;
+
+		--allow-screen )
+			NOSCREENCHECK=1
+			continue
+			;;
+
+		--cron )
+			CRON=1
+			continue
+			;;
+
+		--assume-yes )
+			ASSUMEANSWER=1
+			;;
+		
+		--assume-no )
+			ASSUMEANSWER=2
+			;;
+			
+		--log-time )
+			SHOWTIMESTAMPS=1
+			;;
+	esac
+	set -- "$@" "$__arg"
+done
+
+message --debug "Sourced common.sh"

@@ -40,14 +40,40 @@ function __send_update_notification () {
 	$__AVORION_CMD exec +all "/say ${__NOTIF_PREFIX} New update downloaded! New version: ${__new_version}"
 }
 
+# void __enqueue_restart (void)
+#	Send notifications to the active Avorion galaxies that a
+#	restart is about to occur. Time till restart is currently
+#	setup as one hour.
 #
-#
-#
-#
-#
-function __enqueue_restart() {
-    return 0
+#	Optional Switches:
+#		None
+function __enqueue_restart () {
+	local __message="${__NOTIF_PREFIX} Server restart in %TIME for updates."
+	local __output=''
+	local n=3600
+
+	while (( n > 0 )); do
+		echo $n
+		__output="${__message//\%TIME/$(showtime "$n")}"
+
+		$__AVORION_CMD exec +all --cron "/say $__output"
+		
+		if (( n >= 1800 )); then
+			sleep 15m
+			n=$((n-900))
+		elif (( n >= 600 )); then
+			sleep 5m
+			n=$((n-300))
+		elif (( n >= 61 )); then
+			sleep 1m
+			n=$((n-60))
+		else
+			sleep 1s
+			((n--))
+		fi
+	done
 }
+
 
 function __check_for_steam_update () {
     local __appdata __oldusr __oldgrp __oldhome
@@ -121,7 +147,7 @@ function __check_update_status() {
         complete:success)
             echo "Update has been downloaded and is ready for installation."
         	__send_update_notification
-            __enqueue_restart 3600 "Restarting server for updates"
+            __enqueue_restart "Restarting server for updates"
             return 200
             ;;
 
