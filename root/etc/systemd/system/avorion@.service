@@ -27,7 +27,7 @@ Environment=LOGFILE=/srv/avorion/%i/serverlog-full.log
 ExecStartPre=/bin/bash -c "[[ -d '/srv/avorion/%i' ]] || mkdir '/srv/avorion/%i'"
 ExecStartPre=/bin/touch '/srv/avorion/%i/server.ini' '${LOGFILE}'
 ExecStartPre=/bin/bash -c "printf '\n\n%%s\n' \"Server started at $$(date)\" >> '${LOGFILE}'"
-ExecStart=/usr/bin/tmux -f /etc/avorioncmd-tmux.conf -S /srv/avorion/sockets/%i.sock new-session -d -s avorion-%i "cd /srv/avorion/server_files; LD_LIBRARY_PATH=/srv/avorion/server_files/linux64 /srv/avorion/server_files/bin/AvorionServer --galaxy-name %i --admin ${ADMIN} --datapath /srv/avorion --max-logs ${RETENTION} 2>&1 | tee -a "${LOGFILE}" ; exit $$?"
+ExecStart=/usr/bin/tmux -f /etc/avorioncmd-tmux.conf -S /srv/avorion/sockets/%i.sock new-session -d -s avorion-%i "cd /srv/avorion/server_files; LD_LIBRARY_PATH=/srv/avorion/server_files/linux64 /srv/avorion/server_files/bin/AvorionServer --galaxy-name %i --admin ${ADMIN} --datapath /srv/avorion --max-logs ${RETENTION} 2>&1 | ts \"(%%Y-%%m-%%d %%H:%%M:%%S)\" | tee -a "${LOGFILE}" ; exit $$?"
 ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock send-keys -t avorion-%i '/say Server going is down' ENTER
 ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock send-keys -t avorion-%i '/save' ENTER
 ExecStop=/usr/bin/tmux -S /srv/avorion/sockets/%i.sock send-keys -t avorion-%i '/stop' ENTER

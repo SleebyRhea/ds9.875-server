@@ -23,16 +23,15 @@ do
         i_loadermod = false
     }
 
-    -- Print override that adds mod info and timestamps
+    -- Print override that adds mod info
     function _G.print(...)
         local __modinfo = ""
-        local __timeinfo = "(" .. os.date("%Y-%m-%d %H:%M:%S") .. ") "
 
-        if type(__d.i_loadermod) == "string" then
+		if type(__d.i_loadermod) == "string" then
             __modinfo = "[" .. __d.i_loadermod .. "] "
         end
 
-        io.write(__timeinfo..__modinfo)
+        io.write(__modinfo)
 
         return __vanilla_print(...)
     end
