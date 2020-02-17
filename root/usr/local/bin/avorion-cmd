@@ -199,14 +199,14 @@ function __stop_avorion_instance () {
 }
 
 function __sendcmd_avorion_instance () {
-	if [[ -z "$__inst" ]]; then
-		die "Please supply a valid galaxy: <$__inst>"
+	if [[ -z "$_tmuxsess" ]]; then
+		die "Please supply a valid galaxy: <$_tmuxsess>"
 	fi
 
 	for __param; do
 		"$_tmuxcmd" \
 			-f "${_tmuxconf}" \
-			-S "$AVORION_SERVICEDIR/sockets/${__inst}.sock" \
+			-S "${_tmuxsock}" \
 			send-keys ENTER "$__param" ENTER
 	done
 				 
@@ -214,7 +214,7 @@ function __sendcmd_avorion_instance () {
 	if (( DOATTACH > 0 && DOALL < 1 )); then
 		"$_tmuxcmd" \
 			-f "${_tmuxconf}" \
-			-S "$AVORION_SERVICEDIR/sockets/${__inst}.sock" \
+			-S "${_tmuxsock}" \
 			attach -r
 	fi
 }
